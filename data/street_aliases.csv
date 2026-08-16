@@ -1,0 +1,33 @@
+> Rule 6 (spec §2.4). Keyed on the OUTPUT of rules 1-4, never on raw values.
+> An empty canonical means a deliberate non-match: the value names two roads at
+> once, and assigning it to one would inflate that corridor's count.
+> Every row below was read off crashes.parquet on 2026-08-16, not invented.
+> Lines starting with '>' are comments and are skipped by app/streets.py.
+raw_normalized,canonical,note
+VANWYCK EXPY,VAN WYCK EXPY,missing internal space; splits 4232 / 1423 against VAN WYCK EXPWY
+VANWYCK EXPY EXTENSION,VAN WYCK EXPY EXTENSION,same missing space on the extension
+CROSS BRONX EXTENTION,CROSS BRONX EXPY EXTENSION,misspelled in the source on 84 rows
+BROOKLYN QUEENS EXPY WEST,BROOKLYN QUEENS EXPY,WEST is directional here but is not a safe general noise token
+MAJOR DEEGAN,MAJOR DEEGAN EXPY,left bare after the RAMP token is stripped
+FDR DR SOUTH,FDR DR,directional variant of one road
+LIE OUTER ROADWAY,LONG ISLAND EXPY,roadway designation rather than a street name
+LIE LOWER LEVEL,LONG ISLAND EXPY,roadway designation rather than a street name
+LIE,LONG ISLAND EXPY,initialism
+FLATBUSH AVE EXT,FLATBUSH AVE EXTENSION,abbreviated form of a separate named road
+FLATBUSH AVE EXTENTION,FLATBUSH AVE EXTENSION,misspelled in the source
+BROOKLYN QNS EXPY,BROOKLYN QUEENS EXPY,113 rows abbreviating QUEENS; found by a fuzzy sweep not a prefix probe
+BROOKLYN QUEENS EXPY EXI,BROOKLYN QUEENS EXPY,EXIT truncated by the 32-char column limit
+BROOKLYN QUEENS EXPY W,BROOKLYN QUEENS EXPY,directional
+BELT PKWY WEST,BELT PKWY,directional
+BELT PKWY EAST,BELT PKWY,directional
+BELT PKWY W,BELT PKWY,directional
+BELT PKWY E,BELT PKWY,directional
+BELT PARKWAYY,BELT PKWY,source typo
+BELT PARRKWAY,BELT PKWY,source typo
+BELT PARK WAY,BELT PKWY,source typo
+LONG ISALAND EXPY,LONG ISLAND EXPY,source typo
+LONG ISLAND EXPYWAY,LONG ISLAND EXPY,source typo
+MAJOR DEEGAAN EXPY,MAJOR DEEGAN EXPY,source typo
+MAJOR DEEGAN EXPY EAST,MAJOR DEEGAN EXPY,directional
+FDR DR NORTH,FDR DR,directional
+FDR DR S,FDR DR,directional

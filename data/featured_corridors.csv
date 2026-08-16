@@ -1,0 +1,22 @@
+> Spec §2.3. INPUTS ONLY — this file must never carry a count.
+> Corridor statistics are outputs of the pipeline and are computed at runtime;
+> the bake writes them to data/corridor_fixture.csv. The previous version of the
+> spec carried twelve hand-copied figures and the eng review reproduced zero of
+> twelve, which is why inputs and outputs are now in different files.
+>
+> `canonical` is the join key: the value app/streets.py produces for this road.
+> It is an input to the corridor definition, not a measurement of it.
+> Lines starting with '>' are comments.
+corridor,canonical,lat,lon,expected_class
+Belt Pkwy,BELT PKWY,40.63237,-73.88593,highway
+Long Island Expy,LONG ISLAND EXPY,40.73884,-73.83952,highway
+Broadway,BROADWAY,40.75897,-73.93857,surface
+Brooklyn Queens Expy,BROOKLYN QUEENS EXPY,40.70525,-73.95905,highway
+Grand Central Pkwy,GRAND CENTRAL PKWY,40.73210,-73.83202,highway
+Atlantic Ave,ATLANTIC AVE,40.67949,-73.92183,surface
+FDR Drive,FDR DR,40.76241,-73.95443,highway
+Major Deegan Expy,MAJOR DEEGAN EXPY,40.85410,-73.91810,highway
+Cross Bronx Expy,CROSS BRONX EXPY,40.84353,-73.89401,highway
+Van Wyck Expy,VAN WYCK EXPY,40.70715,-73.81890,highway
+Linden Boulevard,LINDEN BLVD,40.66384,-73.87840,surface
+Flatbush Ave,FLATBUSH AVE,40.64269,-73.95764,surface
