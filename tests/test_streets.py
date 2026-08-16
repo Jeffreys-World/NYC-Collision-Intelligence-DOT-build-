@@ -110,9 +110,37 @@ def test_noise_strip_never_eats_the_first_token():
     It also proves why bare EAST/WEST are not noise tokens: `WEST END AVE` and
     `EAST BROADWAY` are real streets.
     """
-    assert canonical_name("WEST SERVICE ROAD") == "WEST SERVICE RD"
-    assert canonical_name("WEST END AVENUE") == "WEST END AVE"
-    assert canonical_name("EAST BROADWAY") == "EAST BROADWAY"
+    assert canonical_name("WEST SERVICE ROAD") == "W SERVICE RD"
+    assert canonical_name("WEST END AVENUE") == "W END AVE"
+    assert canonical_name("EAST BROADWAY") == "E BROADWAY"
+
+
+def test_leading_direction_words_take_lions_abbreviation():
+    """NYPD spells the direction; LION abbreviates it.
+
+    `EAST TREMONT AVE` in the crash data is `E  TREMONT AVE` in LION, and
+    `NORTH CONDUIT AVE` is `N  CONDUIT AVE`. Without this the street never meets
+    its own road attributes — measured 2026-08-16, Kings Highway alone carries
+    320 LION corridor units on the far side of the spelling.
+
+    It also merges `EAST BROADWAY` with `E BROADWAY`, which is correct: they are
+    one street that the first version of this module counted as two.
+    """
+    assert canonical_name("EAST TREMONT AVENUE") == "E TREMONT AVE"
+    assert canonical_name("NORTH CONDUIT AVENUE") == "N CONDUIT AVE"
+    assert canonical_name("KINGS HIGHWAY") == "KINGS HWY"
+    assert canonical_name("E BROADWAY") == canonical_name("EAST BROADWAY")
+
+
+def test_trailing_direction_is_not_a_leading_direction():
+    """`FDR DR S` names a carriageway, not a street beginning with south.
+
+    Only the FIRST token is treated as a direction word. A trailing one is left
+    alone here and resolved by the alias table, which can tell `FDR DR S` (one
+    road) from a genuinely distinct street.
+    """
+    assert canonical_name("SOUTH CONDUIT AVENUE") == "S CONDUIT AVE"
+    assert canonical_name("FDR DRIVE S") == "FDR DR"   # via the alias table
 
 
 def test_parentheticals_are_stripped():
@@ -247,6 +275,26 @@ def test_falls_back_to_cross_street_and_says_so():
 def test_reports_no_match_rather_than_guessing():
     assert canonical_street(None, None) == (None, "none")
     assert canonical_street("", "   ") == (None, "none")
+
+
+def test_pandas_nan_is_missing_not_a_street_named_nan():
+    """The regression that got past the first version of this suite.
+
+    pandas hands a missing string cell back as float('nan'), which is not None.
+    `str(nan)` is "nan" -> "NAN", a plausible-looking street name. Joining the
+    crash data to the LION attributes on 2026-08-16 produced "NAN" as the single
+    largest corridor in New York City, at 229,828 crashes.
+
+    Every fixture elsewhere in this file is a literal or comes from DuckDB, and
+    both of those produce None — which is exactly why this needs its own test.
+    """
+    nan = float("nan")
+    assert canonical_name(nan) is None
+    assert canonical_street(nan, nan) == (None, "none")
+    assert canonical_street(nan, "3468  RICHMOND RD") == ("RICHMOND RD", "cross")
+    # The string forms that pandas/pyarrow round-trips produce.
+    for literal in ("nan", "NaN", "None", "<NA>", "null"):
+        assert canonical_name(literal) is None, literal
 
 
 # ------------------------------------- the featured corridors, against the data

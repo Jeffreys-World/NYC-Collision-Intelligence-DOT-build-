@@ -74,7 +74,24 @@ _SUFFIXES = {
     "TURNPIKE": "TPKE", "TPK": "TPKE",
     "DRIVE": "DR",
     "PLACE": "PL",
+    # LION abbreviates HIGHWAY; NYPD spells it. `KINGS HWY` carries 320 LION
+    # corridor units and would otherwise never meet `KINGS HIGHWAY` in the crash
+    # data, costing the whole street its road attributes.
+    "HIGHWAY": "HWY",
 }
+
+# Leading direction words, normalised to LION's abbreviation. NYPD writes
+# `EAST TREMONT AVE` and `NORTH CONDUIT AVE`; LION writes `E  TREMONT AVE` and
+# `N  CONDUIT AVE` (with the double space its fixed-width export leaves behind,
+# which the whitespace collapse above already handles).
+#
+# LEADING position only. A trailing direction is a different thing entirely —
+# `FDR DR S` is a carriageway of one road, not a street whose name starts with
+# south — and those are handled by the alias table instead.
+#
+# This also merges `EAST BROADWAY` with `E BROADWAY`, which is correct: they are
+# one street, and the first version of this module treated them as two.
+_LEADING_DIRECTION = {"EAST": "E", "WEST": "W", "NORTH": "N", "SOUTH": "S"}
 
 # Rule 4. Everything from the first noise token onward is dropped.
 #
@@ -125,6 +142,24 @@ def _standardise_tokens(tokens: list[str]) -> list[str]:
     return [_SUFFIXES.get(t, t) for t in tokens]
 
 
+def _abbreviate_leading_direction(tokens: list[str], *, tail_follows: bool) -> list[str]:
+    """Abbreviate a leading direction word, but never a bare one.
+
+    `tail_follows` is True when a ` SERVICE RD` suffix is about to be re-appended.
+    Without it, `WEST SERVICE ROAD` reaches here as the single token ['WEST'],
+    looks like a street named simply "WEST", and keeps its long spelling while
+    `W SERVICE RD` — which also occurs in the raw data — keeps its short one.
+    Two spellings of one road, produced by the normaliser itself.
+    """
+    if not tokens:
+        return tokens
+    if len(tokens) == 1 and not tail_follows:
+        return tokens
+    if tokens[0] in _LEADING_DIRECTION:
+        tokens = [_LEADING_DIRECTION[tokens[0]], *tokens[1:]]
+    return tokens
+
+
 def _strip_noise(tokens: list[str]) -> list[str]:
     """Drop everything from the first noise token onward.
 
@@ -149,7 +184,20 @@ def normalize_name(raw: str | None, *, is_cross_street: bool = False) -> str | N
     """
     if raw is None:
         return None
+    # pandas and numpy deliver a missing string cell as float('nan'), which is
+    # not None and is not equal to itself. `str(nan)` is "nan", which uppercases
+    # to "NAN" — a plausible-looking street name that silently becomes the
+    # single largest corridor in the dataset. Measured 2026-08-16 while joining
+    # to the LION attributes: 229,828 crashes had aggregated under "NAN",
+    # outranking every real street in the city.
+    #
+    # The tests did not catch it because they feed literals and DuckDB, both of
+    # which produce None. Only the pandas path produces the float.
+    if raw != raw:
+        return None
     value = str(raw)
+    if value.strip().lower() in ("nan", "none", "<na>", "null"):
+        return None
     if is_cross_street:
         value = _strip_house_number(value)
 
@@ -181,6 +229,7 @@ def normalize_name(raw: str | None, *, is_cross_street: bool = False) -> str | N
 
     tokens = _standardise_tokens(value.split(" "))
     tokens = _strip_noise(tokens)
+    tokens = _abbreviate_leading_direction(tokens, tail_follows=service_road)
     if not tokens:
         return None
 
