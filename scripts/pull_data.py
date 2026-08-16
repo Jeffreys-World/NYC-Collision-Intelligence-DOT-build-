@@ -49,11 +49,24 @@ import requests
 # truststore makes Python use the OS certificate store instead, which already
 # trusts the interceptor. Optional: on a clean network the import just fails and
 # nothing changes. Same root cause as `uv` needing --system-certs here.
+#
+# The rescue is NAMED and it announces itself. Swallowing every exception here
+# cost a whole pull on 2026-08-16: truststore was simply not installed, the bare
+# `except Exception: pass` hid that, and the failure surfaced 150 lines later as
+# a CERTIFICATE_VERIFY_FAILED from requests — which reads like a broken endpoint
+# or an expired server certificate, not a missing local package. A silent
+# fallback that turns a one-line fix into a confusing error is the same failure
+# this project bans in the UI (spec §4.2); the rule applies to scripts too.
 try:
     import truststore
+except ImportError:
+    print("note: truststore is not installed. On a TLS-intercepting network "
+          "requests will fail with CERTIFICATE_VERIFY_FAILED, because it uses "
+          "its own certifi bundle rather than the OS certificate store.\n"
+          "      fix: python -m pip install truststore",
+          file=sys.stderr, flush=True)
+else:
     truststore.inject_into_ssl()
-except Exception:
-    pass
 
 DATASET = "h9gi-nx95"
 BASE = f"https://data.cityofnewyork.us/resource/{DATASET}.csv"
@@ -72,14 +85,23 @@ def load_token() -> str | None:
     """Read the app token from the environment, loading .env if present.
 
     python-dotenv is optional so the script still runs in CI without it.
+
+    Accepts either name. The seeded script read NYC_OPEN_DATA_APP_TOKEN while
+    .env.example documented SOCRATA_APP_TOKEN, so a token pasted into .env by
+    following the committed instructions was silently ignored and the pull
+    quietly fell back to the anonymous rate-limit pool — a 429 halfway through
+    an 848,000-row pull, with nothing on screen explaining why.
     """
     try:
         from dotenv import load_dotenv
         load_dotenv()
     except ImportError:
         pass
-    tok = os.environ.get("NYC_OPEN_DATA_APP_TOKEN", "").strip()
-    return tok or None
+    for name in ("SOCRATA_APP_TOKEN", "NYC_OPEN_DATA_APP_TOKEN"):
+        tok = os.environ.get(name, "").strip()
+        if tok:
+            return tok
+    return None
 
 
 def _where(start_year: int, end_year: int) -> str:
