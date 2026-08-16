@@ -1,0 +1,31 @@
+# DEV dependencies. Never installed on Streamlit Community Cloud.
+#
+# Install with:
+#   py -m venv .venv
+#   .venv/Scripts/python -m pip install -r requirements.txt -r requirements-dev.txt
+#
+# Python 3.12 is reachable as `py` on this machine, not `python` — the `python`
+# on PATH is the Microsoft Store stub. NEVER write `py` inside a script or a
+# GitHub Actions workflow; ubuntu runners have no `py` launcher. README and
+# comments only.
+
+-r requirements.txt
+
+# Offline borough recovery (point-in-polygon). Heavy: pulls GDAL/shapely/pyproj.
+# Runs on your machine only, and its output is baked into the Parquet.
+# Spec §6 step 2: use the WATER-INCLUDED borough boundaries, not the
+# shoreline-clipped variant — the clipped polygons drop points over water, which
+# is exactly where the elevated and waterfront highways sit.
+geopandas>=1.0
+shapely>=2.0
+pyproj>=3.6
+
+# Offline Socrata refresh (scripts/pull_data.py). Not a runtime dependency.
+requests>=2.32
+python-dotenv>=1.0
+
+# Uses the OS cert store; needed on TLS-intercepting networks
+truststore>=0.10
+
+# Tests
+pytest>=8.3

@@ -1,0 +1,46 @@
+name: tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Runtime deps plus pytest only. requirements-dev.txt pulls geopandas,
+      # which drags in GDAL and takes minutes to install — the offline borough
+      # recovery runs on a laptop, not here, and no test needs it.
+      #
+      # NOTE: `python`, never `py`. The `py` launcher exists on the dev machine
+      # but not on ubuntu runners.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+
+      - name: Test
+        run: python -m pytest -q
+
+      # The committed Parquet is the whole data layer. If it goes missing or
+      # gets truncated by a bad re-bake, every figure in the app changes
+      # silently — so fail here instead.
+      - name: Verify the committed Parquet
+        run: |
+          python - <<'PY'
+          import duckdb, sys
+          n = duckdb.connect().execute(
+              "SELECT count(*) FROM read_parquet('data/processed/crashes.parquet')"
+          ).fetchone()[0]
+          print(f"crashes.parquet rows: {n}")
+          if n != 812315:
+              sys.exit(f"expected 812315 rows, got {n} — the Parquet changed")
+          PY
