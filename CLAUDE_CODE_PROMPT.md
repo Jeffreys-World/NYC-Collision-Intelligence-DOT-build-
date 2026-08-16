@@ -105,9 +105,11 @@ already implements everything below.
 
 Endpoint: `https://data.cityofnewyork.us/resource/h9gi-nx95.json`
 
-- Send an app token in the `X-App-Token` header, read from
-  `st.secrets["SOCRATA_APP_TOKEN"]`. Without it you share an anonymous
-  rate-limit pool and will see intermittent 429s.
+- Send an app token in the `X-App-Token` header, read from `.env` via
+  `python-dotenv` — **not** `st.secrets`. The refresh is an offline script with
+  no Streamlit runtime, so `st.secrets` is unavailable to it, and the deployed
+  app needs no secret at all because it never calls the API. Without a token you
+  share an anonymous rate-limit pool and will see intermittent 429s.
 - **Every request must carry `$order=crash_date`.** Socrata pagination without
   a stable sort repeats and drops rows. This bug already occurred in this
   project and produced a sample that was 89% one year.

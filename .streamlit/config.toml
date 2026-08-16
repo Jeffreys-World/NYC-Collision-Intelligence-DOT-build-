@@ -1,0 +1,42 @@
+# Theme. DESIGN.md is the source of truth; this file is where the base surfaces
+# and the accent are actually applied.
+
+[theme]
+base = "dark"
+
+# DESIGN.md §1. backgroundColor is the base surface; secondaryBackgroundColor is
+# the panel the drawer and control bar sit on.
+backgroundColor = "#0F1419"
+secondaryBackgroundColor = "#161C22"
+textColor = "#E6EDF3"
+
+# The accent is RESERVED for Empirical Bayes figures (DESIGN.md §1). If it shows
+# up on a button or a generic control, that is a bug — expected-vs-observed is
+# the one distinction this colour carries.
+primaryColor = "#4C9BE8"
+
+# TYPOGRAPHY — pending. DESIGN.md §2 specifies IBM Plex Sans Condensed for
+# headings, IBM Plex Mono for figures and IBM Plex Sans for body, self-hosted as
+# woff2 under assets/fonts/ and declared here as [[theme.fontFaces]].
+#
+# Deliberately NOT declared yet: the woff2 files are not committed, and pointing
+# fontFaces at files that do not exist gives a silent fallback to the system
+# stack, which is the exact outcome DESIGN.md §2 exists to prevent. Add the
+# files and this block together, in one commit, so the failure mode stays loud.
+#
+# [[theme.fontFaces]]
+# family = "IBM Plex Sans Condensed"
+# url = "app/static/IBMPlexSansCondensed-SemiBold.woff2"
+# weight = 600
+#
+# headingFont = "IBM Plex Sans Condensed"
+# font = "IBM Plex Sans"
+# codeFont = "IBM Plex Mono"
+
+[server]
+# The app reads a committed Parquet and makes no network calls, so nothing here
+# needs to reach out. Keep usage stats off for a tool shown to an agency.
+enableCORS = true
+
+[browser]
+gatherUsageStats = false
