@@ -298,3 +298,58 @@ def test_the_http_getter_is_injectable():
     signature = inspect.signature(check_feed)
     assert "get" in signature.parameters
     assert signature.parameters["get"].default is live.urllib_get
+
+
+# --- regression: app.data.date_bounds() -> check_feed() ---------------------
+#
+# Found by /qa on 2026-08-17, clicking "Check the live feed for anything
+# newer" in the running app: TypeError: can't compare datetime.datetime to
+# datetime.date, raised from `if newest <= coverage_through:` in check_feed.
+# `crash_date` is a DuckDB TIMESTAMP column, so `date_bounds()` returned
+# `datetime.datetime` despite its `-> tuple[date, date]` type hint, and
+# nothing caught it because every test up to this point (above) hand-built a
+# `date` for COVERAGE rather than exercising the real integration. Every unit
+# test in this file still passes with a plain `datetime.datetime` swapped in
+# for `coverage_through`, which is exactly how this shipped: the unit is
+# correct, the seam between two correct units was not.
+
+def test_check_feed_rejects_a_naive_datetime_coverage_argument():
+    """Locks in the *symptom* so a future refactor can't silently reintroduce
+    the datetime/date mismatch at this seam without a test noticing.
+    """
+    from datetime import datetime
+
+    with pytest.raises(TypeError):
+        check_feed(datetime(2026, 6, 11), get=getter(MAX_DATE_BODY))
+
+
+def test_date_bounds_returns_plain_date_not_datetime():
+    """The actual fix: app.data.date_bounds() must coerce DuckDB's
+    TIMESTAMP-derived datetimes to date before returning, so every caller
+    downstream (this module, the date picker, the freshness line) gets what
+    the type hint already promised.
+    """
+    from app.data import date_bounds, get_connection, resolve_source
+
+    source = resolve_source()
+    if source.kind == "none":
+        pytest.skip("no committed Parquet in this environment")
+    con = get_connection(source.reader)
+    lo, hi = date_bounds(con)
+    assert type(lo) is date
+    assert type(hi) is date
+
+
+def test_date_bounds_output_feeds_check_feed_without_raising():
+    """The end-to-end path the UI actually exercises: date_bounds() straight
+    into check_feed(), with no manual coercion in between.
+    """
+    from app.data import date_bounds, get_connection, resolve_source
+
+    source = resolve_source()
+    if source.kind == "none":
+        pytest.skip("no committed Parquet in this environment")
+    con = get_connection(source.reader)
+    _, coverage_hi = date_bounds(con)
+    check = check_feed(coverage_hi, get=getter(MAX_DATE_BODY))
+    assert check.outcome in (NO_NEWER, NEWER, UNREACHABLE, REFUSED)

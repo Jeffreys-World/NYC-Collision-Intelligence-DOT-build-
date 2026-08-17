@@ -180,11 +180,19 @@ def date_bounds(con: duckdb.DuckDBPyConnection) -> tuple[date, date]:
     The upstream feed stopped at 2026-06-11 and the shipped slice ends earlier
     still. A picker defaulting to "last 30 days" would return zero rows and read
     as a broken app.
+
+    `crash_date` is a DuckDB TIMESTAMP column, so `.fetchone()` returns
+    `datetime.datetime`, not `datetime.date`, despite this function's return
+    type. Coerce with `.date()` here rather than downstream: found live via
+    /qa when `app.live.check_feed` raised `TypeError: can't compare
+    datetime.datetime to datetime.date` comparing this value's datetime
+    against a plain `date` parsed from the Socrata feed — a crash on the
+    freshness popover's one button, every time, for every user.
     """
     lo, hi = con.execute(
         "SELECT min(crash_date), max(crash_date) FROM crashes_raw"
     ).fetchone()
-    return lo, hi
+    return lo.date(), hi.date()
 
 
 def freshness_line(coverage_to: date) -> str:
