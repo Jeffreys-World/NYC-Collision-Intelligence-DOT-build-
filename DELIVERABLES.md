@@ -1,56 +1,45 @@
 # DELIVERABLES — outstanding work
 
-Updated 2026-08-16 (end of the macOS migration session). Branch
-`build/day-2-eb-and-bake`. 217 tests pass. See `NEXT-SESSION.md` for the full
-handoff and the rebuild commands.
+Updated 2026-08-17 (the bake landed). Branch `build/day-2-eb-and-bake`. 222 tests
+pass. See `NEXT-SESSION.md` for the full handoff and the rebuild commands.
 
-## One honest caveat, and one retraction
+## Closed since the last update
 
-- [ ] **The EB model has a real defect, and it is the top of the list.** A
-  corridor's `eb_estimate` is summed over geocoded cells only, but is compared
-  against an `observed` count that includes the 7.8% of crashes carrying a street
-  and no coordinate. 18,499 of 248,856 training casualties (7.4%) are invisible
-  to EB, concentrated on limited-access roads (17.5% against 5.5% for surface).
-  `eb_estimate` sums to *exactly* `observed_in_cells`, which proves net citywide
-  shrinkage is ~0 and the whole gap is coverage. On Belt Pkwy the split is 686
-  casualties of coverage loss against 26 of real shrinkage — 96% of the apparent
-  correction is missing coordinates wearing an EB label, which is the §2.7
-  failure arriving by a new route.
+- [x] **The EB footprint defect is fixed.** Corridor rows now carry
+  `observed_in_cells` / `holdout_in_cells` / `coverage`, and validation compares
+  like with like. The negative corridor lift is retracted — on a coverage-fair
+  baseline every corridor lift straddles zero (top-250 −0.27pp → +0.04pp,
+  top-500 −0.60pp → −0.02pp).
+- [x] **Rate-adjusted RMSE + bootstrap CI added to `validate()`.** EB wins the
+  error test raw ranking cannot: cell RMSE 2.1855 vs raw 2.2837, corridor 13.3907
+  vs 15.3353. Every lift is now printed with its bootstrap interval.
+- [x] **THE BAKE.** `scripts/bake.py --commit` ran 2026-08-17.
+  `data/processed/crashes.parquet` is now 848,739 rows / 36 columns / 2019-01-01
+  to 2026-06-11, carrying `borough_recovered`, `borough_source`, `canonical`,
+  `canonical_source`, `lat_c`, `lon_c`. The §2.3 corridor fixture is pinned in
+  `tests/test_corridor_fixture.py` and its 5 previously-skipped tests now run.
+- [x] **All figures + the CI gate updated in the same commit as the bake.**
+  §0.2 in `CLAUDE_CODE_PROMPT.md`, `README.md`, and
+  `.github/workflows/tests.yml` (812,315 → 848,739) all moved together;
+  `scripts/verify_figures.py`'s `PUBLISHED` dict already matched the new figures.
+  All 18 reproduce exactly.
 
-- [ ] **Retract the negative corridor lift.** The −0.27pp / −0.60pp figures in
-  the project record are the footprint handicap, not a property of Empirical
-  Bayes. On a coverage-fair baseline they are −0.00pp / +0.04pp / −0.00pp. The
-  honest corridor claim is "no measurable difference", which is a different
-  statement from "EB is worse".
+## One thing still open from the audit
 
 - [ ] **The EB audit never finished.** The refutation pass did not report, so
-  every finding except the footprint defect is single-source and unverified. The
-  journal and all ten agent transcripts survive on this machine —
-  `NEXT-SESSION.md` has the path.
+  every finding except the footprint defect (now fixed above) is single-source
+  and unverified. The journal and all ten agent transcripts survive on this
+  machine — `NEXT-SESSION.md` has the path.
 
 ## Top of the list, in order
 
-- [ ] **Fix the footprint defect** — add `observed_in_cells` / `holdout_in_cells`,
-  rank and validate on them, and label coverage in the product so a corridor
-  estimate never silently omits 17% of its harm (§4.2).
-- [ ] **Add the validation that measures what EB is for** — rate-adjusted RMSE
-  and a bootstrap CI. Every lift currently quoted to two decimals sits inside its
-  own confidence interval on zero. Use RMSE, not MAE: MAE is minimised by the
-  conditional median, which is 0 for a sub-1 mean count, so it rewards predicting
-  zero.
+- [ ] **Re-run the audit's refutation pass** before trusting anything under
+  "What the EB audit established" in `NEXT-SESSION.md` beyond the footprint fix.
 - [ ] **Decide the ranking unit: cell, or corridor.** The evidence says cell —
   corridor top-decile persistence is 1.007, i.e. no regression to the mean left
   to correct, because independent cell noise cancels when ~66 cells are summed.
   The cell is already §2.1's map unit. This changes §2.7 and `DESIGN.md`, so it
-  is a decision, not a refactor.
-- [ ] **THE BAKE — the owner's review checkpoint. Stop and show them.** §6 step 2:
-  bake exactly once, carrying `borough_recovered`, `borough_source`, canonical
-  street name and the EB key together. **Blocked on the defect above**, because
-  the EB key is part of the schema being frozen.
-- [ ] **Update all 18 figures + the CI gate in the same commit as the bake.**
-  `scripts/verify_figures.py` prints the §0.2 table paste-ready and diffs it
-  against the docs. `.github/workflows/tests.yml` still asserts exactly 812,315
-  rows and will fail the moment the new Parquet lands.
+  is a decision, not a refactor. Still undecided.
 - [ ] **`data/countermeasures.csv` (§3.2)** — the last blocker on the estimator.
   Costs, CMFs, star ratings, measured setting and a source URL per treatment,
   from the FHWA CMF Clearinghouse. §0.3 #4 forbids inventing a CMF. The seven

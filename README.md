@@ -7,15 +7,16 @@ that the lag does not weaken.
 
 **Status:** data layer complete and reproducible; street normalisation, borough
 recovery, road classification and the Empirical Bayes fit all landed; **no UI yet.**
-The committed Parquet is still the 2019–2025 slice — the re-bake to 2026-06-11 is the
-owner's review checkpoint and has not run. See `NEXT-SESSION.md`.
+The committed Parquet has been re-baked to 2026-06-11, carrying `borough_recovered`,
+`borough_source`, `canonical` and the EB cell key — the owner's review checkpoint
+from §6 step 2. See `NEXT-SESSION.md`.
 
 ## What it does that other NYC crash maps do not
 
-Every standard borough view silently drops the 261,117 crashes with no recorded
-borough — and those rows carry 830 of the city's 1,877 traffic deaths, **44.2%**.
-This tool includes them, recovers a borough for the 213,246 that carry coordinates,
-and shows the share on every corridor. On highways that share runs 92–98%.
+Every standard borough view silently drops the 269,810 crashes with no recorded
+borough — and those rows carry 861 of the city's 1,945 traffic deaths, **44.3%**.
+This tool includes them, recovers a borough for the 221,658 that carry coordinates,
+and shows the share on every corridor. On highways that share runs 88–98%.
 
 It also ranks by Empirical Bayes expected harm rather than raw observed counts, so
 the ranking is not distorted by regression to the mean. Observed figures stay
@@ -23,21 +24,21 @@ labelled observed; anything predictive is labelled expected.
 
 ## Data
 
-`data/processed/crashes.parquet` — 812,315 rows, 2019-01-01 to 2025-12-31, committed
+`data/processed/crashes.parquet` — 848,739 rows, 2019-01-01 to 2026-06-11, committed
 so the deployed app has no runtime data dependency.
 
 | Measure | Value |
 |---|---|
-| Rows | 812,315 |
-| Rows with casualties | 275,066 (33.9%) |
-| Total deaths | 1,877 |
-| Crashes with no borough | 261,117 (32.1%) |
-| Deaths in rows with no borough | 830 (44.2%) |
-| Fatality rate, unlabeled vs labeled | 3.179 vs 1.899 per 1,000 (1.67×) |
+| Rows | 848,739 |
+| Rows with casualties | 290,354 (34.2%) |
+| Total deaths | 1,945 |
+| Crashes with no borough | 269,810 (31.8%) |
+| Deaths in rows with no borough | 861 (44.3%) |
+| Fatality rate, unlabeled vs labeled | 3.191 vs 1.872 per 1,000 (1.70×) |
 
-Every figure re-verified against the Parquet on 2026-08-15. The pipeline emits
-corridor-level figures to `data/processed/corridor_fixture.csv`; they are
-deliberately not written into prose, because the previous version of the spec
+Every figure re-verified against the Parquet on 2026-08-17, the day of the bake. The
+pipeline emits corridor-level figures to `data/processed/corridor_fixture.csv`; they
+are deliberately not written into prose, because the previous version of the spec
 carried twelve hand-copied corridor counts and none of them reproduced.
 
 ## Setup

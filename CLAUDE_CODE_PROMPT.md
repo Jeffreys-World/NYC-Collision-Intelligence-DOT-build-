@@ -11,14 +11,14 @@ on Streamlit Community Cloud.
 ## 0. Read this first — verified facts and hard constraints
 
 Every figure below was measured directly against
-`data/processed/crashes.parquet` on 2026-08-15. Do not recompute them from
-memory, and do not soften them.
+`data/processed/crashes.parquet` on 2026-08-17, the day of the §6 step 2 bake. Do
+not recompute them from memory, and do not soften them.
 
 ### 0.1 The data is NOT real-time. Never imply that it is.
 
-The NYPD collision feed lags roughly **65 days** — the most recent crash on the
+The NYPD collision feed lags roughly **67 days** — the most recent crash on the
 public API is 2026-06-11. The committed Parquet covers **2019-01-01 to
-2025-12-31**.
+2026-06-11**.
 
 This is a police-reporting pipeline, not a fixable API problem. Therefore:
 
@@ -42,20 +42,21 @@ question becomes a credibility moment. Handled badly, it ends the demo.
 
 | Measure | Value |
 |---|---|
-| Rows (2019–2025) | 812,315 |
-| Rows with casualties (injured > 0 OR killed > 0) | 275,066 (**33.9%**) |
-| Rows with no coordinates | 65,272 |
-| Crashes with no `borough` value | 261,117 (**32.1%**) |
-| Total deaths | 1,877 |
-| Deaths in rows with no borough | 830 (**44.2%**) |
-| Fatality rate, unlabeled vs labeled | 3.179 vs 1.899 per 1,000 (**1.67×**) |
-| Unlabeled rows **carrying coordinates** | 213,246 (81.7% of unlabeled) |
-| Distinct raw `vehicle_type_code1` values | 1,380 |
+| Rows (2019–2026-06-11) | 848,739 |
+| Rows with casualties (injured > 0 OR killed > 0) | 290,354 (**34.2%**) |
+| Rows with no coordinates | 66,419 |
+| Crashes with no `borough` value | 269,810 (**31.8%**) |
+| Total deaths | 1,945 |
+| Deaths in rows with no borough | 861 (**44.3%**) |
+| Fatality rate, unlabeled vs labeled | 3.191 vs 1.872 per 1,000 (**1.70×**) |
+| Unlabeled rows **carrying coordinates** | 221,658 (82.2% of unlabeled) |
+| Distinct raw `vehicle_type_code1` values | 1,430 |
 
-Every figure above was re-verified against the Parquet on 2026-08-15 during the
-engineering review. All 18 matched exactly.
+Every figure above reproduces exactly against the committed Parquet — run
+`scripts/verify_figures.py` to check. These are the §6 step 2 bake figures
+(848,739 rows, 2019-01-01 to 2026-06-11), not the earlier 812,315-row slice.
 
-**Read the last row carefully.** 213,246 is a *has-coordinates* count, not a
+**Read the last row carefully.** 221,658 is a *has-coordinates* count, not a
 *will-match-a-polygon* count. It is an upper bound on recovery, never an
 acceptance criterion. See §6 step 2.
 
@@ -172,7 +173,7 @@ Endpoint: `https://data.cityofnewyork.us/resource/h9gi-nx95.json`
 
 The proposed
 `$where=latitude IS NOT NULL AND (number_of_persons_injured > 0 OR number_of_persons_killed > 0)`
-keeps only **33.9%** of records (275,066 of 812,315).
+keeps only **34.2%** of records (290,354 of 848,739).
 
 That is a defensible lens for safety engineering, but it must be a **labelled,
 user-visible toggle** defaulting to *off*, with the row count shown both ways.
@@ -203,7 +204,7 @@ basemap). Do not add Deck.gl-via-JS, Leaflet or a Mapbox token dependency.
   (~1.1km) yields 914 bins ≈ 0.1 MB of JSON; `round(…, 3)` (~110m) yields 35,546
   bins ≈ 2 MB. Streamlit re-serialises the layer on every rerun on a ~1 GB
   container, so open the demo at the coarse level.
-- Never let the 65,272 rows without coordinates reach the layer.
+- Never let the 66,419 rows without coordinates reach the layer.
 - **Colour by the Empirical Bayes estimate, not raw observed harm.** See §2.7.
   Raw `killed × 10 + injured` stays available as an *observed* figure in the
   drawer; it must not drive ranking or colour.
@@ -300,18 +301,19 @@ contributing factors, victim-type split (pedestrian / cyclist / motorist), and
 the hour-of-week peak.
 
 **The vehicle breakdown is omitted from v1** — see `TODOS.md`. Reason, verified
-2026-08-15: `vehicle_type_code1` has 1,380 distinct values, and `Sedan` alone
+2026-08-15 and unchanged in the §6 bake: `vehicle_type_code1` has 1,430 distinct
+values, and `Sedan` alone
 splits across `Sedan` (372,582), `4 dr sedan` (488), `2 dr sedan` (40),
 `SEDAN` (3), `sedan` (1). Never group by it raw; it needs a controlled taxonomy
 built the same way as the street alias table.
 
 ### 2.6 The differentiating feature: include the dropped rows
 
-Every other NYC crash map silently drops the 261,117 records with no borough —
-and those rows carry **44.2% of the deaths**. This tool includes them.
+Every other NYC crash map silently drops the 269,810 records with no borough —
+and those rows carry **44.3% of the deaths**. This tool includes them.
 
 Surface this in the drawer as a badge: `Includes N crashes other tools drop`.
-On highway corridors that share is 92–98%, which makes the point vividly with no
+On highway corridors that share is 88–98%, which makes the point vividly with no
 extra explanation needed.
 
 Report the recovery as a three-way slice where space allows — see `TODOS.md`.
@@ -438,7 +440,7 @@ building.
 
 - Python dataclasses or Pydantic models for the config and result objects; no
   free-floating dicts across module boundaries.
-- Null-check every spatial operation. 65,272 rows have no coordinates and must
+- Null-check every spatial operation. 66,419 rows have no coordinates and must
   never reach the map layer.
 - Treat `(0, 0)` coordinates as missing — null island is absent data wearing a
   coordinate costume.

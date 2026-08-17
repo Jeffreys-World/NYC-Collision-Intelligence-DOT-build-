@@ -41,6 +41,6 @@ jobs:
               "SELECT count(*) FROM read_parquet('data/processed/crashes.parquet')"
           ).fetchone()[0]
           print(f"crashes.parquet rows: {n}")
-          if n != 812315:
-              sys.exit(f"expected 812315 rows, got {n} — the Parquet changed")
+          if n != 848739:
+              sys.exit(f"expected 848739 rows, got {n} — the Parquet changed")
           PY
