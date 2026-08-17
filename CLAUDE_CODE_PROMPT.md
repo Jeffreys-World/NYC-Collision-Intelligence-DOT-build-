@@ -92,16 +92,64 @@ acceptance criterion. See §6 step 2.
 Read `data/processed/crashes.parquet` via DuckDB. This is the demo path. It is
 fast, offline, and cannot fail on stage.
 
-### 1.2 Secondary source: the Socrata API — OFFLINE SCRIPT ONLY
+### 1.2 Secondary source: the Socrata API — offline refresh AND a live check
 
-**There is no runtime API path in the deployed app.** §0.1 forbids displaying data
-newer than the shipped slice, so a live client can only fetch records the UI may
-not show, while adding rate limits, 429s, pagination bugs and schema drift to the
-demo path. The refresh lives in `scripts/`, runs on a laptop, and its output is a
-re-baked Parquet.
+**Changed by the owner on 2026-08-16. This section previously read "There is no
+runtime API path in the deployed app." That is no longer true.** The owner chose
+a hybrid, and both halves are required:
 
-Port `scripts/pull_data.py` from the seeded repo rather than rewriting it — it
-already implements everything below.
+1. **Offline.** The committed Parquet is extended by `scripts/`, on a laptop, to
+   cover 2019-01-01 through 2026-06-11 — the whole of what the feed carries.
+   This remains the demo path (§1.1): fast, offline, and it cannot fail on
+   stage. *(The pipeline through `crashes_recovered.parquet` covers that range
+   as of 2026-08-16; the committed Parquet itself is re-baked at §6 step 2,
+   which is the owner's review checkpoint and has not happened yet.)*
+2. **Runtime.** The deployed app gains **one** network call: a user-triggered
+   *"check for newer records"* action that queries the API, shows exactly what
+   came back, and reports it honestly.
+
+**Why a live call when the answer is almost always "nothing new".** That IS the
+answer, and demonstrating it is worth more than asserting it. §0.1 says a DOT
+engineer will ask whether this is current and that the answer decides the demo.
+A presenter claiming the feed lags is making a claim; a button that queries the
+live API in front of them and returns the same date the app already shows turns
+the room's scepticism into the product's evidence. The lag stops being an excuse
+and becomes a measurement.
+
+Measured live on 2026-08-16, anonymously, with no app token:
+
+| Query | Result |
+|---|---|
+| Newest crash on the API | **2026-06-11** |
+| Crashes in the last 30 days | **0** |
+| Anonymous access | HTTP 200 in 0.3–1.2s, no 429 |
+
+Re-verified 2026-08-16 on macOS: HTTP 200 in 0.72s, newest still 2026-06-11.
+
+**A live query is not live data. Every §0.1 rule still stands** — the banned
+words, and no elapsed-days figure anywhere, including in whatever this action
+renders.
+
+Constraints on the runtime path, each of which is load-bearing:
+
+- **The HTTP getter is injected**, so the whole module is testable offline. CI
+  must never make a network call; a test suite whose result depends on NYC Open
+  Data being up is not a test suite.
+- **`app/live.py` must not import `duckdb` and must not touch the `Source`
+  seam.** The live check reports on the feed; it never becomes a data source for
+  anything the app renders. Keeping it structurally unable to do so is cheaper
+  than a rule saying it must not.
+- **A failed call must never look like a successful call that found nothing.**
+  A timeout, a 429 and "the feed genuinely has nothing newer" are three
+  different outcomes and must read as three different outcomes. This is §4.2's
+  loud-not-seamless rule applied to the one place the app can now fail.
+- **A copy test greps every user-visible string in the module for the §0.1
+  banned words**, so the rule is enforced by CI rather than by memory.
+- Block the §3.4 export while a live check is in its error state, same as any
+  other degraded section.
+
+The offline refresh keeps its own rules. Port `scripts/pull_data.py` from the
+seeded repo rather than rewriting it — it already implements everything below.
 
 Endpoint: `https://data.cityofnewyork.us/resource/h9gi-nx95.json`
 

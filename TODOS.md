@@ -95,23 +95,35 @@ stands and the caveat is mandatory wherever the tool ranks or recommends spendin
 
 ## Data pipeline
 
-### Offline Socrata refresh script
+### ~~Offline Socrata refresh script~~ — REVERSED BY THE OWNER, 2026-08-16
 
-**What:** Keep the Socrata pull as a `scripts/` job that re-bakes the Parquet on a laptop.
-No runtime API path in the deployed app.
+**Status: no longer deferred.** This entry used to say "No runtime API path in the
+deployed app". The owner overrode that and chose a hybrid. **§1.2 is now the authority.**
 
-**Why:** §0.1 forbids the app from displaying data newer than the shipped slice, so a
-runtime client can only fetch records the UI may not show — while adding rate limits, 429s,
-pagination bugs and schema drift to the live demo path.
+**What changed:** the offline refresh stays, and the deployed app additionally gains one
+user-triggered "check for newer records" call.
 
-**Context:** The hard parts are already solved in the sibling repo's `scripts/pull_data.py`
-(253 lines): `$order=crash_date` on every request, chunk reindexing to a fixed column list,
-exponential backoff on 429/5xx, never retrying 400. Do not rewrite it — port it. Revisit a
-runtime path only if the product genuinely needs in-app refresh, which would first require
-revisiting §0.1.
+**Why the reversal:** the feed's lag is the first thing a DOT engineer challenges, and
+§0.1 says that answer decides the demo. A live query answering it in the room beats a
+presenter asserting it — the query returns the same date the app already shows, which
+converts scepticism into the product's own evidence.
+
+**The original reasoning was not wrong about the risks**, so those became the constraints
+in §1.2 rather than a veto: an injected HTTP getter so CI never makes a network call, no
+`duckdb` import and no contact with the `Source` seam, a failure that can never read as an
+empty success, and a copy test grepping the module for §0.1's banned words.
+
+**Still true and still the rule:** the offline pull is ported from the sibling repo, never
+rewritten — `$order=crash_date` on every request, chunk reindexing to a fixed column list,
+exponential backoff on 429/5xx, never retrying 400. That port is done, in
+`scripts/pull_data.py`, and re-pulled 848,742 rows cleanly on 2026-08-16.
+
+**Outstanding:** `app/live.py` itself. The workflow designing it on 2026-08-16 never wrote
+files and its journal did not survive the move to macOS; the contract summary in
+`NEXT-SESSION.md` is what remains.
 
 **Effort:** M
-**Priority:** P3
+**Priority:** P1
 **Depends on:** None
 
 ## Interaction
