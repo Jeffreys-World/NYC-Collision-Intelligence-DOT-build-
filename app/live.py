@@ -60,6 +60,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Callable, Protocol
 
+import streamlit as st
+
 DATASET = "h9gi-nx95"
 ENDPOINT = f"https://data.cityofnewyork.us/resource/{DATASET}.json"
 
@@ -89,9 +91,26 @@ class Getter(Protocol):
     def __call__(self, url: str, *, timeout: float) -> str: ...
 
 
+def _app_token() -> str | None:
+    """Raises the Socrata rate-limit ceiling. Unauthenticated calls work fine
+    for this app's single-click usage; the token only matters if someone
+    mashes the button repeatedly during a demo. Missing secrets file (e.g.
+    CI, a fresh clone) must not break the call, so every failure mode here
+    just means "no token" rather than an exception.
+    """
+    try:
+        return st.secrets.get("SOCRATA_APP_TOKEN") or None
+    except Exception:
+        return None
+
+
 def urllib_get(url: str, *, timeout: float) -> str:
     """The real getter. The only place this module touches the network."""
-    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    headers = {"Accept": "application/json"}
+    token = _app_token()
+    if token:
+        headers["X-App-Token"] = token
+    request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             if response.status != 200:
