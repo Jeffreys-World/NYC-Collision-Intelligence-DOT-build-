@@ -1,13 +1,21 @@
 # DEV dependencies. Never installed on Streamlit Community Cloud.
 #
 # Install with:
-#   py -m venv .venv
-#   .venv/Scripts/python -m pip install -r requirements.txt -r requirements-dev.txt
+#   uv venv --python 3.12 .venv
+#   uv pip install --python .venv/bin/python -r requirements.txt -r requirements-dev.txt
 #
-# Python 3.12 is reachable as `py` on this machine, not `python` — the `python`
-# on PATH is the Microsoft Store stub. NEVER write `py` inside a script or a
-# GitHub Actions workflow; ubuntu runners have no `py` launcher. README and
-# comments only.
+# The interpreter is `.venv/bin/python` (POSIX). This project was developed on
+# Windows through 2026-08-16 and moved to macOS, so any surviving reference to
+# `.venv/Scripts/python` or the `py` launcher is stale — fix it rather than
+# working around it. NEVER write `py` inside a script or a GitHub Actions
+# workflow either way; ubuntu runners have no `py` launcher.
+#
+# EVERYTHING NEEDED TO REBUILD THE DATA LAYER MUST BE PINNED HERE. On
+# 2026-08-16 the move to macOS found this file missing statsmodels, scipy and
+# pyogrio: they had been pip-installed straight into the old .venv and never
+# recorded, so `scripts/fit_eb.py` did not import on a fresh machine. Gitignored
+# `data/raw/` was empty for the same class of reason. If you install something
+# to make a script run, it belongs in this file in the same commit.
 
 -r requirements.txt
 
@@ -19,6 +27,15 @@
 geopandas>=1.0
 shapely>=2.0
 pyproj>=3.6
+# geopandas reads the boundary GeoJSON through pyogrio; without it the read
+# falls back to fiona, which is not pinned here and is not installed.
+pyogrio>=0.9
+
+# Safety Performance Function + Empirical Bayes (scripts/fit_eb.py). The
+# negative binomial fit is statsmodels; scipy comes with it but is named
+# explicitly because the fit depends on it directly.
+statsmodels>=0.14
+scipy>=1.13
 
 # Offline Socrata refresh (scripts/pull_data.py). Not a runtime dependency.
 requests>=2.32
