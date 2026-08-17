@@ -1,0 +1,131 @@
+> Curated limited-access roads (spec §3.1). A small, closed, stable set.
+> ANYTHING NOT ON THIS LIST IS A SURFACE STREET. There is no rule, no threshold
+> and no regex behind the classification — this file IS the classification.
+>
+> Lines starting with '>' are comments, skipped by the loader, same convention as
+> data/street_aliases.csv.
+>
+> WHY A LIST AND NOT A RULE. Spec §3.1 forbids gating on "unlabeled borough share
+> >= 90%", and the reason is measured on this data:
+>
+>   HORACE HARDING EXPY   1,792 crashes   unlabeled 0.64   LION limited-access 0.00
+>
+> Horace Harding Expressway is the Long Island Expressway's SERVICE ROAD. It is
+> named EXPY, it posts 30 mph, and it is a surface street with driveways and
+> crosswalks on it. A name rule puts it in the highway branch and offers it
+> guardrail; a share rule is not far behind. It is on no list here, so it is
+> surface, which is correct.
+>
+> The reverse error is just as easy. These carry BRIDGE inside their names and
+> are ordinary streets: BRIDGE ST, WILLIAMSBRIDGE RD, BAINBRIDGE AVE,
+> BAINBRIDGE ST, KINGSBRIDGE AVE, KINGSBRIDGE TERRACE, E KINGSBRIDGE RD,
+> W KINGSBRIDGE RD. None appear below.
+>
+> COLUMNS
+>   canonical    the output of app.streets.canonical_street — match on this, never
+>                on a raw NYPD spelling
+>   road_class   highway | bridge | tunnel. All three take the §3.1 highway
+>                countermeasure set; the distinction is recorded for the drawer's
+>                correctable road-class control, which shows its basis.
+>   basis        lion   -- LION types 2/3/4/9 carry a majority of the street's
+>                          length, measured in data/raw/corridor_features.parquet
+>                curated -- LION disagrees or has no matching name; a human
+>                          decided, and the note says on what grounds
+>   lion_share   the measured limited-access length share, blank where LION has no
+>                matching name. Kept so the disagreement stays visible rather than
+>                being resolved silently.
+>   unlabeled    share of the road's crashes with no NYPD borough. SECONDARY
+>                SIGNAL ONLY, per §3.1 — it is a police-paperwork artifact, not a
+>                fact about the road. It is here so that when it and the list
+>                disagree the estimator can log a warning naming the road, which
+>                is how a road missing from this list gets found.
+>
+> BRIDGES ARE IN because a bridge span's cross-section is fixed by its structure.
+> You cannot put a road diet, a refuge island or daylighting on it, whether or not
+> it carries a sidewalk. That is the reason, not "pedestrians are absent" —
+> several bridges below do carry pedestrians.
+>
+> HOW THIS LIST WAS CHECKED, without using the check to build it. The list was
+> curated from LION road types and NYC road knowledge. Only afterwards was the
+> unlabeled share measured across all 8,931 canonical streets:
+>
+>   63 roads on this list      112,000 crashes   mean unlabeled share  0.948
+>   8,868 surface roads        737,000 crashes   mean unlabeled share  0.221
+>
+> The two populations separate cleanly on a signal that was not used to build
+> the list, which is the strongest evidence available that it is right.
+>
+> The cross-check flags five surface roads with >=150 crashes and >=90%
+> unlabeled: S AVE, FOREST HILL RD, PORT RICHMOND AVE, MORNINGSTAR RD and
+> HOYT AVE NORTH. FOUR OF THE FIVE ARE ON STATEN ISLAND, and Staten Island runs
+> 43.8% unlabeled against 23.7-30.4% in the other four boroughs. They are
+> ordinary surface streets in a borough whose paperwork omits the borough. That
+> is §3.1's claim — borough-nullness is a police-reporting artifact, not a fact
+> about the road — measured directly, and it is why none of the five is listed.
+>
+> Every figure below was measured against data/raw/crashes_recovered.parquet
+> (848,739 rows, 2019-01-01..2026-06-11) and the LION unit cache on 2026-08-16.
+canonical,road_class,basis,lion_share,unlabeled,note
+BELT PKWY,highway,lion,1.00,0.98,the corridor §7 opens on
+BROOKLYN QUEENS EXPY,highway,lion,0.96,0.97,
+GRAND CENTRAL PKWY,highway,lion,0.78,0.92,service road is a separate canonical name and stays surface
+LONG ISLAND EXPY,highway,lion,0.99,0.97,its service road is HORACE HARDING EXPY and is deliberately absent
+CROSS BRONX EXPY,highway,lion,0.88,0.88,
+CROSS BRONX EXPY EXTENSION,highway,curated,,1.00,no LION name; separately named road carrying the Alexander Hamilton Bridge approach
+VAN WYCK EXPY,highway,lion,0.84,0.91,0.49 before ramps were counted — see build_corridor_features.py
+VAN WYCK EXPY EXTENSION,highway,curated,,0.95,no LION name; extension of the above
+MAJOR DEEGAN EXPY,highway,lion,1.00,0.94,
+CROSS ISLAND PKWY,highway,lion,0.80,0.93,ranks top-ten and is absent from the §2.3 featured list
+HENRY HUDSON PKWY,highway,lion,1.00,0.98,
+BRUCKNER EXPY,highway,lion,0.98,0.93,
+BRONX RIVER PKWY,highway,lion,1.00,0.94,
+STATEN ISLAND EXPY,highway,lion,0.96,0.99,
+JACKIE ROBINSON PKWY,highway,lion,0.95,0.98,
+HUTCHINSON RIVER PKWY,highway,lion,0.81,0.90,
+WHITESTONE EXPY,highway,lion,0.58,0.89,lowest LION share on the list; corroborated by 0.89 unlabeled
+GOWANUS EXPY,highway,lion,1.00,0.97,
+GOWANUS,highway,curated,,1.00,bare form of the above on 674 crashes
+CLEARVIEW EXPY,highway,lion,0.75,0.95,
+NEW ENGLAND THRUWAY,highway,lion,0.98,0.92,I-95 through the Bronx
+W SHORE EXPY,highway,lion,0.99,1.00,
+NASSAU EXPY,highway,lion,0.89,0.84,measured 85.7% unlabeled in the spec's own §3.1 counter-example
+THROGS NECK EXPY,highway,lion,0.61,0.82,
+PROSPECT EXPY,highway,lion,1.00,0.75,
+PROSPECT EXPY EAST,highway,curated,,1.00,directional variant with no LION name
+KOREAN WAR VETS PKWY,highway,lion,1.00,0.99,posts 50 mph, the highest on the list
+SHERIDAN EXPY,highway,curated,,0.76,no LION name after normalisation; unambiguously limited access
+MOSHOLU PKWY,highway,lion,1.00,0.72,E MOSHOLU PKWY NORTH and SOUTH are its service roads and stay surface
+LAURELTON PKWY,highway,curated,0.00,0.88,LION SAYS 0.00 AND LION IS WRONG HERE — a limited-access parkway linking the Belt to the Southern State. This is the row that proves the list must be able to override the measurement.
+FDR DR,highway,lion,0.98,0.96,
+HARLEM RIVER DR,highway,lion,0.91,0.96,
+TRIBOROUGH BRIDGE,bridge,curated,,1.00,RFK. LION spells it ROBERT F KENNEDY BRG and does not join
+VERRAZANO BRIDGE,bridge,curated,,1.00,LION spells it VERRAZZANO BRG with two Zs and does not join
+VERRAZANO BRIDGE UPPER,bridge,curated,,1.00,upper deck; 2224 crashes, the busiest single bridge name in the data
+VERRAZANO BRIDGE LOWER,bridge,curated,,1.00,lower deck
+BRONX WHITESTONE BRIDGE,bridge,curated,,1.00,
+THROGS NECK BRIDGE,bridge,curated,,1.00,
+BROOKLYN BRIDGE,bridge,lion,1.00,0.98,carries a heavily used pedestrian promenade and is still a fixed cross-section
+MANHATTAN BRIDGE,bridge,curated,,0.95,
+MANHATTAN BR UPPER,bridge,curated,,1.00,NYPD abbreviates BRIDGE to BR on the deck variants
+MANHATTAN BR LOWER,bridge,curated,,1.00,
+WILLIAMSBURG BRIDGE,bridge,curated,,0.60,
+WILLIAMSBURG BRIDGE OUTER ROADWA,bridge,curated,,1.00,truncated at the 32-character column limit; the source has no closing Y
+WILLIAMSBURG BRIDGE INNER ROADWA,bridge,curated,,1.00,truncated at the 32-character column limit
+QUEENSBORO BRIDGE,bridge,lion,1.00,0.95,LION spells it ED KOCH QUEENSBORO BRG
+QUEENSBORO BRIDGE UPPER,bridge,curated,,1.00,
+QUEENSBORO BRIDGE LOWER,bridge,curated,,1.00,
+QUEENSBORO BRIDGE UPPER ROADWAY,bridge,curated,,0.99,
+QUEENSBORO BRIDGE LOWER ROADWAY,bridge,curated,,1.00,
+ALEXANDER HAMILTON BRIDGE,bridge,curated,,0.98,carries the Cross Bronx over the Harlem River
+WASHINGTON BRIDGE,bridge,curated,,0.75,distinct from the George Washington Bridge, which is Port Authority and barely appears
+WASHINGTON BRIDGE 181 ST,bridge,curated,,0.98,approach variant
+WILLIS AVE BRIDGE,bridge,lion,0.88,0.96,
+WILLIS AVE BRIDGE APPROACH,bridge,curated,,1.00,
+MACOMBS DAM BRIDGE,bridge,curated,,0.92,movable bridge with sidewalks; included on the fixed-cross-section grounds above
+THIRD AVE BRIDGE,bridge,curated,,0.99,
+MADISON AVE BRIDGE,bridge,curated,,0.97,
+UNIVERSITY HEIGHTS BRIDGE,bridge,curated,,0.52,lowest unlabeled share of any bridge here; kept because the structure decides, not the paperwork
+PULASKI BRIDGE,bridge,curated,,0.97,
+MARINE PKWY BRIDGE,bridge,curated,,1.00,Gil Hodges Memorial
+QUEENS MIDTOWN TUNNEL,tunnel,curated,,0.97,
+BROOKLYN BATTERY TUNNEL,tunnel,curated,,1.00,Hugh L Carey
