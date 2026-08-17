@@ -1,0 +1,36 @@
+> Spec §3.2. One row per treatment named in app/road_class.py's
+> HIGHWAY_TREATMENTS / SURFACE_TREATMENTS. Every CMF and cost here is a real,
+> sourced figure from the FHWA CMF Clearinghouse (or the named secondary
+> source for cost, where the Clearinghouse does not carry pricing) — never
+> invented, per §0.3 #4. Researched 2026-08-17; see cmf_source_url /
+> cost_source_url on each row.
+>
+> CMF is a MULTIPLIER: 0.75 means expected crashes fall to 75% of baseline
+> (a 25% reduction). Never treat it as a percentage.
+>
+> unit_cost_usd is a PLANNING DEFAULT, always rendered as an editable
+> st.number_input in the UI (§3.2) — not a fact. Several of these costs come
+> from a single case study or a secondary (non-DOT) source rather than a
+> systematic cost database; that provenance is named in `note` so the UI can
+> surface it, per §0.3 #4's spirit of not overstating confidence.
+>
+> daylighting has NO dedicated CMF anywhere in the Clearinghouse. NYC DOT's
+> own January 2025 report (mandated by Local Law 66) says so explicitly:
+> "There is little direct evidence connecting daylighting to safety... often
+> justified based on past literature and practices rather than empirical
+> research." cmf is left at 1.00 (§5's named empty state: "No expected effect
+> at CMF 1.00") rather than borrowing the HSM's generic on-street-parking
+> CMF, which the Clearinghouse itself flags as not independently star-rated.
+>
+> signal_upgrade_smart_phasing uses the flashing-yellow-arrow CMF, which is
+> what NYC DOT means by "smart phasing." If read instead as adaptive signal
+> control, the Clearinghouse shows CMFs at or above 1.0 (facid 10806/10623) —
+> i.e. no established safety benefit — so do not substitute that CMF here.
+treatment,label,road_class,unit,unit_cost_usd,cmf,cmf_star_rating,cmf_setting,cmf_id,cmf_source_url,cost_source_url,note
+guardrail_attenuator_retrofit,Guardrail & attenuator retrofit,highway,linear ft,92,0.524,3,"rural / all roadway types, fatal+injury crashes (K-C), hazardous side slopes 1V:3H-1V:2H",11195,https://cmfclearinghouse.fhwa.dot.gov/detail.php?facid=11195,contractor market pricing (not a DOT cost sheet) — $25-$160/linear ft W-beam guardrail; end terminals $1500-$3500 each and crash cushions $15000-$45000/unit separately,"CMF is for guardrail placement on hazardous slopes; the Clearinghouse has no CMF specific to crash-cushion/attenuator devices. Cost is a linear-ft guardrail estimate only — attenuator units are priced separately, see note."
+high_friction_surface_treatment,High-friction surface treatment,highway,sq yd,23.5,0.324,4,"urban 2-lane, all crash types (K-C), within horizontal curve",11412,https://cmfclearinghouse.fhwa.dot.gov/detail.php?facid=11412,https://hfsta.org/cost.html ($21-$26/sq yd; Georgia DOT 1.2M sq yd project averaged $21.00 in 2017 dollars),"A rural run-off-road variant also exists (CMF 0.477, 5 stars, facid 11440) — this row uses the urban curve CMF as the closer match to NYC corridors."
+signal_upgrade_smart_phasing,Signal upgrade / smart phasing (flashing yellow arrow),surface,per intersection,0,0.635,4,"urban signalized intersections, left-turn crashes, all severities",4175,https://cmfclearinghouse.fhwa.dot.gov/detail.php?facid=4175,NOT FOUND — no clean citable unit cost for FYA conversion alone; secondary reporting on a bundled Louisiana DOT signal-upgrade project implies roughly $60000-$77000/intersection but that includes other work,"Unit cost intentionally 0 — enter your agency's figure (§5's named empty state applies: 'Enter a unit cost to see cost per crash avoided')."
+road_diet,Road diet (4-to-3 lane conversion),surface,per mile (restriping only),32500,0.53,5,"urban/suburban, 4-to-3 lane conversion, all crash types/severities",2841,https://cmfclearinghouse.fhwa.dot.gov/detail.php?facid=2841,https://www.eesi.org/files/cs-fhwa_diets.pdf (FHWA road diet fact sheet, $25000-$40000 restriping-only; figure is a secondary citation of this PDF, not independently re-verified against a primary FHWA cost table),"Restriping-only cost; a road diet requiring geometric reconstruction costs substantially more."
+pedestrian_refuge_island,Pedestrian refuge island,surface,per island,60000,0.81,3,"urban midblock (intersection/driveway crashes excluded), all crash types (K-C)",7789,https://cmfclearinghouse.fhwa.dot.gov/detail.php?facid=7789,https://www.seattle.gov/documents/departments/sdot/pedestrianprogram/pedestrian_project_toolkit.pdf ($21000-$100000 broad cost-tier bucket; not a precise unit cost),"Split from road_diet per §3.2 — different treatment, different price. Cost is the midpoint of a wide published range; treat as a rough planning default and adjust."
+leading_pedestrian_interval,Leading pedestrian interval,surface,per intersection,1000,0.87,5,"urban/suburban signalized intersections, vehicle/pedestrian crashes, NYC/Chicago/Charlotte 2009-2015",9918,https://cmfclearinghouse.fhwa.dot.gov/detail.php?facid=9918,https://nacto.org/wp-content/uploads/safety_effectiveness_of_lpi_fayish.pdf (Fayish & Gross, TRB — controller reprogramming + signage, 2005 dollars),"A second CMF (0.86, total injury crashes, facid 9917) exists from the same study. Cost is from 2005 and almost certainly understates current pricing — edit before using."
+daylighting,Daylighting (corner parking removal),surface,per intersection,1500,1.00,,no rated CMF exists (see header note),,https://www.nyc.gov/html/dot/downloads/pdf/daylighting-and-street-safety.pdf,"https://nyc.streetsblog.org/2026/06/01/city-council-takes-another-swing-at-daylighting-bill-to-ban-corner-parking (paint + plastic bollards, Hoboken NJ implementation); NYC OMB estimated ~$17000/intersection for a hardened concrete version (2024 City Council estimate)","NO DEDICATED CMF — see header note. CMF held at 1.00 (no assumed effect) rather than inventing one. This is the honest gap, not a placeholder to fill in later with a guess."

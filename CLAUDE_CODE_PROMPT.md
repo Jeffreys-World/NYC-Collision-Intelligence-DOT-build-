@@ -318,37 +318,69 @@ extra explanation needed.
 
 Report the recovery as a three-way slice where space allows — see `TODOS.md`.
 
-### 2.7 Rank on the Empirical Bayes estimate, not raw observed harm
+### 2.7 Rank on the Empirical Bayes estimate, not raw observed harm — at the cell,
+### not the corridor
 
-Ranking corridors by `killed × 10 + injured` is the naive approach, and §3.3
-already apologises for its central defect: high-crash sites regress toward the
-mean, so a naive before-and-after over-credits any treatment. Empirical Bayes is
-the Highway Safety Manual's prescribed correction, and **it is already built and
-validated in a sibling repo**:
+Ranking by `killed × 10 + injured` is the naive approach, and §3.3 already
+apologises for its central defect: high-crash sites regress toward the mean, so
+a naive before-and-after over-credits any treatment. Empirical Bayes is the
+Highway Safety Manual's prescribed correction. **This project fits its own EB
+model** (`scripts/fit_eb.py`) on this repo's own recovered Parquet — the earlier
+plan to reuse the sibling repo's `scored-units.parquet` did not survive contact
+with the data and is superseded by everything below. **Never quote the sibling
+repo's +18.4pp lift here; it is a different model on a different population.**
 
-```
-nyc-crash-risk-forecast/data/processed/scored-units.parquet
-  220,033 scored units  (136,537 corridors + 83,496 intersections)
-  columns: unit_id, unit_type, borough, casualties_36mo,
-           spf_prediction, eb_estimate, is_priority, treated
-  validation: train 2019-2023 / holdout 2024-2025
-              lift +18.4pp, CI +17.5 to +19.3, excludes zero
-```
+**RANKING UNIT DECIDED 2026-08-17: the cell, not the corridor.** Evidence, from
+the audited cell-level fit:
+
+- EB shrinkage weight is real at the cell (**0.211**) but the corridor rollup
+  destroys it (**0.0002** at whole-corridor granularity before the fix below).
+  Corridor top-decile persistence is **1.007** — no regression to the mean left
+  to correct, because a top-decile corridor averages ~66 cells and independent
+  cell noise cancels in the sum.
+- The cell (`round(lat/lon, 3)`, ~111m × 84m) is already §2.1's map unit, so
+  ranking and colouring at the cell needs no new geometry.
+- **Corridor figures are a descriptive rollup of ranked cells, not an EB
+  correction in their own right.** Show them in the drawer as sums/means over
+  the corridor's cells, never re-rank corridors by a separate corridor-level EB
+  fit.
+
+**What can be claimed, from the rate-adjusted holdout test — use these numbers
+and no others:**
+
+| | raw | EB |
+|---|---|---|
+| Cell RMSE | 2.2837 | **2.1855** (−4.30%, bootstrap CI [3.83%, 4.76%]) |
+| Head over-prediction (highest-count cells) | +29.0% | **+17.9%** |
+
+Plus: **+12.7pp capture among cells raw count cannot rank at all** — the 39.8% of
+cells with zero training casualties, which carry 9.7% of holdout harm.
+
+**A guard that already fired once, keep it firing:** at `observed == 0` the EB
+estimate is `mu/(1+mu/k)`, strictly increasing in `mu`, so EB's ordering of those
+cells is *identical* to the SPF's ordering. The low-count lift is real but
+belongs to the SPF, not to Empirical Bayes specifically — if both are quoted,
+quote them separately, never combined as one EB number.
 
 Rules:
 
-- **Rank and colour by `eb_estimate`.** It is also the baseline the CMFs
-  multiply. Never apply a CMF to a raw observed count.
+- **Rank and colour by cell-level `eb_estimate`.** It is also the baseline the
+  CMFs multiply. Never apply a CMF to a raw observed count.
 - **Observed counts stay observed.** Crashes, injured and killed are facts and
   belong in the drawer as facts, labelled *observed*. Anything predictive is
   labelled *expected*. That distinction is the whole seam — keep it visible.
-- The EB units are geometry-derived (150ft max join distance, 100ft intersection
-  radius) and the DOT corridors are street-name matched, so the join is real
-  work, not a lookup. Bake the join key into the Parquet (§6 step 2).
-- A corridor with no matching EB unit is labelled unmatched, per §4.2.
+- **A corridor lift number, if shown at all, must carry its bootstrap CI** —
+  every corridor-level lift measured so far sits inside its own CI on zero (see
+  `NEXT-SESSION.md`). Do not print a bare percentage.
+- **Coverage caveat is mandatory wherever a corridor rollup is shown.** Bridges
+  and tunnels are not geocoded by NYPD (coordinate coverage 0.153 and 0.210
+  against 0.943 for surface streets) — Brooklyn Bridge has 305 observed
+  casualties and 16 visible to the cell grid. A cell-coloured map will read the
+  Brooklyn Bridge as near-harmless unless this is labelled. See §4.2.
+- A corridor with no matching EB cells at all is labelled unmatched, per §4.2.
 
-This is the one axis where the target user is the expert. "Is this EB-adjusted?"
-must have a yes behind it.
+This is the one axis where the target user is the expert. "Is this EB-adjusted,
+and at what unit?" must have a straight answer.
 
 ---
 

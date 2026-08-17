@@ -1,7 +1,38 @@
 # DELIVERABLES — outstanding work
 
-Updated 2026-08-17 (the bake landed). Branch `build/day-2-eb-and-bake`. 222 tests
-pass. See `NEXT-SESSION.md` for the full handoff and the rebuild commands.
+Updated 2026-08-17 (first working UI landed). Branch `build/day-2-eb-and-bake`.
+234 tests pass. See `NEXT-SESSION.md` for the full handoff and the rebuild
+commands.
+
+## Closed today, after the bake
+
+- [x] **Ranking unit decided: cell, not corridor.** CLAUDE_CODE_PROMPT.md §2.7
+  rewritten — cell-level EB is the ranking/colour unit, corridor is a
+  descriptive rollup. Only the audited claims are quoted (−4.30% cell RMSE,
+  +12.7pp capture where raw can't rank, head over-prediction 29.0%→17.9%);
+  the sibling repo's +18.4pp is explicitly barred from this doc now.
+- [x] **`data/countermeasures.csv` (§3.2) — no invented CMFs.** All 7
+  treatments in `app/road_class.py` have a row, each CMF sourced from the FHWA
+  CMF Clearinghouse (facid + star rating + source URL) or left honestly
+  unrated. Daylighting has **no dedicated CMF anywhere in the Clearinghouse**
+  — held at CMF 1.00 rather than borrowing a proxy, with NYC DOT's own report
+  quoted saying so. `tests/test_estimator.py` asserts every non-1.0 CMF
+  carries a rating and a source.
+- [x] **First working UI** — `app/streamlit_app.py`: freshness line +
+  `st.popover` wired to `app/live.py`, sticky control bar, map (pydeck
+  ColumnLayer, cell-level EB colour/height), drawer with a correctable
+  road-class control, ranked corridor table (the accessibility equivalent),
+  countermeasure estimator (branches highway vs. surface, editable CMF/cost,
+  §3.3 caveat block), PDF export (`app/pdf_export.py`, reportlab). Verified
+  live in a browser: Belt Pkwy → highway branch (guardrail/HFST only),
+  Atlantic Ave → surface branch (5 treatments), both drawers reproduce the
+  §2.3 fixture exactly. `app/theme.py` carries the DESIGN.md §1 tokens; IBM
+  Plex self-hosting is still not done (no woff2 files committed).
+- [x] **Known gap, not a bug:** headless test browsers without a GPU can't
+  create a WebGL context, so the map can't be screenshotted in this sandbox.
+  Real browsers (including Streamlit Community Cloud's client-side render)
+  have working WebGL — confirmed the map's data layer is correct via the
+  ranked table and drawer, which pull from the same query.
 
 ## Closed since the last update
 
@@ -35,17 +66,18 @@ pass. See `NEXT-SESSION.md` for the full handoff and the rebuild commands.
 
 - [ ] **Re-run the audit's refutation pass** before trusting anything under
   "What the EB audit established" in `NEXT-SESSION.md` beyond the footprint fix.
-- [ ] **Decide the ranking unit: cell, or corridor.** The evidence says cell —
-  corridor top-decile persistence is 1.007, i.e. no regression to the mean left
-  to correct, because independent cell noise cancels when ~66 cells are summed.
-  The cell is already §2.1's map unit. This changes §2.7 and `DESIGN.md`, so it
-  is a decision, not a refactor. Still undecided.
-- [ ] **`data/countermeasures.csv` (§3.2)** — the last blocker on the estimator.
-  Costs, CMFs, star ratings, measured setting and a source URL per treatment,
-  from the FHWA CMF Clearinghouse. §0.3 #4 forbids inventing a CMF. The seven
-  treatments are already named in `app/road_class.py`.
-- [ ] **Wire `app/live.py` into the UI** — the module and its 26 offline tests are
-  done, but nothing renders it. `st.popover` on the freshness line (§5).
+- [ ] **IBM Plex self-hosting (DESIGN.md §2)** — woff2 files not committed yet;
+  `.streamlit/config.toml`'s `fontFaces` block stays commented out until they
+  land, on purpose (a broken font path silently falls back to the system
+  stack, which is the exact failure self-hosting exists to prevent).
+- [ ] **Radius selection, victim-type breakdown, XLSX export** — all
+  deliberately deferred, see `TODOS.md`.
+- [ ] **Deploy to Streamlit Community Cloud** and re-verify the WCAG 2.2 AA
+  pass against the live URL (`TODOS.md`) — the accessibility audit needs the
+  deployed app, not localhost.
+- [ ] **Bridge/tunnel coverage gap is labelled in code comments but not yet in
+  the UI** — the map will read the Brooklyn Bridge (coordinate coverage 0.05)
+  as near-harmless unless this is surfaced. §4.2 territory.
 
 ## Closed this session
 

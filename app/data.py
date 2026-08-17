@@ -44,6 +44,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SQL_DIR = ROOT / "sql"
 
 PARQUET = ROOT / "data" / "processed" / "crashes.parquet"
+EB_CORRIDORS_CSV = ROOT / "data" / "eb_corridors.csv"
+EB_CELLS_PARQUET = ROOT / "data" / "raw" / "eb_cells.parquet"
 
 # Static by design, and both halves are facts that cannot rot.
 #
@@ -89,7 +91,30 @@ def get_connection(reader: str) -> duckdb.DuckDBPyConnection:
     # self-reference DuckDB rejects with "infinite recursion detected".
     con.execute(f"CREATE OR REPLACE VIEW crashes_base AS SELECT * FROM {reader}")
     _ensure_recovery_columns(con)
+    _ensure_eb_views(con)
     return con
+
+
+def _ensure_eb_views(con: duckdb.DuckDBPyConnection) -> None:
+    """Register the EB fit's own outputs as views, keyed the same as crashes.
+
+    Both are `scripts/fit_eb.py` output, refit independently of a Streamlit
+    rerun — the app reads them, it never computes them. Absent gracefully: a
+    dev environment that has not run the fit yet gets empty views rather than
+    a crash, and every EB figure downstream reads as unmatched rather than
+    zero (§4.2).
+    """
+    if EB_CORRIDORS_CSV.exists():
+        con.execute(
+            f"CREATE OR REPLACE VIEW eb_corridors AS "
+            f"SELECT * FROM read_csv_auto('{EB_CORRIDORS_CSV.as_posix()}')"
+        )
+    else:
+        con.execute(
+            "CREATE OR REPLACE VIEW eb_corridors AS "
+            "SELECT NULL::VARCHAR AS canonical, NULL::DOUBLE AS eb_estimate, "
+            "NULL::BOOLEAN AS eb_matched, NULL::DOUBLE AS coverage WHERE FALSE"
+        )
 
 
 def _ensure_recovery_columns(con: duckdb.DuckDBPyConnection) -> None:
@@ -185,6 +210,20 @@ def build_view(con: duckdb.DuckDBPyConnection, date_from: date, date_to: date) -
     con.execute("DELETE FROM filter_params")
     con.execute("INSERT INTO filter_params VALUES (?, ?)", [date_from, date_to])
     con.execute(read_sql("base_view"))
+
+
+def set_selection(con: duckdb.DuckDBPyConnection, corridor: str | None) -> None:
+    """(Re)point `selection_params` at the corridor the drawer is showing.
+
+    Same reasoning as `build_view`: DuckDB cannot prepare a CREATE VIEW, so the
+    value goes in via a parameterised INSERT into a one-row table rather than
+    being interpolated into SQL text. `corridor=None` clears the drawer to a
+    value no canonical name can ever equal, so `selection_rows` returns zero
+    rows instead of raising.
+    """
+    con.execute("CREATE TABLE IF NOT EXISTS selection_params (corridor VARCHAR)")
+    con.execute("DELETE FROM selection_params")
+    con.execute("INSERT INTO selection_params VALUES (?)", [corridor or "\x00none\x00"])
 
 
 @st.cache_data(show_spinner=False)
