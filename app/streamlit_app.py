@@ -8,6 +8,8 @@ for the demo sequence this screen has to support end to end.
 from __future__ import annotations
 
 import csv
+import json
+import math
 import sys
 from pathlib import Path
 
@@ -34,6 +36,7 @@ from app.data import (
 
 ROOT = Path(__file__).resolve().parent.parent
 FEATURED_CSV = ROOT / "data" / "featured_corridors.csv"
+BOROUGH_BOUNDARIES = ROOT / "data" / "raw" / "boroughs_water-included.geojson"
 
 # scripts/fit_eb.py prints a warning list of corridors whose EB estimate sits
 # over a badly incomplete coordinate footprint (bridges and tunnels above
@@ -45,7 +48,8 @@ FEATURED_CSV = ROOT / "data" / "featured_corridors.csv"
 LOW_COVERAGE_THRESHOLD = 0.5
 
 st.set_page_config(page_title="NYC Collision Intelligence — DOT", layout="wide")
-theme.inject()
+
+theme.inject("light" if st.session_state.get("light_mode_toggle") else "dark")
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +61,13 @@ def load_featured_corridors() -> pd.DataFrame:
     with FEATURED_CSV.open(encoding="utf-8-sig", newline="") as fh:
         rows = (line for line in fh if not line.startswith(">"))
         return pd.DataFrame(csv.DictReader(rows))
+
+
+@st.cache_data(show_spinner=False)
+def load_borough_boundaries() -> dict:
+    """Outline-only geographic context for the map (§2.1's severity colour
+    channel stays uncontested — this layer carries no fill)."""
+    return json.loads(BOROUGH_BOUNDARIES.read_text(encoding="utf-8"))
 
 
 source = resolve_source()
@@ -82,6 +93,75 @@ if con is None:
 
 coverage_lo, coverage_hi = date_bounds(con)
 featured = load_featured_corridors()
+
+
+# ---------------------------------------------------------------------------
+# Title and functionality summary
+# ---------------------------------------------------------------------------
+
+title_col, theme_col = st.columns([5, 1])
+with title_col:
+    st.markdown(
+        '<h1 style="margin-bottom:0.1rem">NYC Collision Intelligence</h1>'
+        '<p style="color:var(--ink-dim);font-size:1rem;margin-top:0;max-width:64rem">'
+        "A chronic-risk prioritisation tool for NYC DOT transit and safety "
+        "engineers, built on the NYPD Motor Vehicle Collisions dataset. It ranks "
+        "streets by <strong>expected</strong> harm (Empirical Bayes, corrected for "
+        "regression to the mean) rather than raw observed crash counts, and it "
+        "includes the crashes every other borough-level view silently drops."
+        "</p>",
+        unsafe_allow_html=True,
+    )
+with theme_col:
+    # No explicit st.rerun() here — Streamlit already reruns the whole script
+    # on any widget change, and this widget's own `key` is what makes
+    # st.session_state["light_mode_toggle"] available at the top of the NEXT
+    # run, before theme.inject() is called. Forcing a second manual rerun
+    # right after reading the value raced against Streamlit's own automatic
+    # one and intermittently corrupted the render (page went blank until a
+    # full reload) — found while testing this exact toggle live.
+    st.toggle(
+        "Light mode", key="light_mode_toggle",
+        help="Switch the page between the dark workspace theme this app "
+             "ships with and a light, print-friendlier palette. Every colour "
+             "keeps the same meaning in both — only the background flips.",
+    )
+
+with st.expander("What each part of this page does — start here if you're new"):
+    st.markdown(
+        "- **Light mode toggle** (top right) — switches between the dark "
+        "workspace theme and a light background. Purely visual; every "
+        "figure and colour-code below means the same thing either way.\n"
+        "- **Map** — every scored ~111m × 84m street cell, coloured and "
+        "sized by expected harm. Filled = Empirical Bayes estimate; a cell "
+        "with no EB match never appears here. The **'Show as 3D height'** "
+        "switch above the map adds height as a second, redundant encoding "
+        "of the same value — off by default so the map reads as a flat, "
+        "easy-to-scan heat map.\n"
+        "- **Featured corridors dropdown** — pick a named street to open its "
+        "detail. Also the keyboard and screen-reader path into the drawer, "
+        "since the map itself is a WebGL canvas with no per-cell semantics.\n"
+        "- **Casualty crashes only** — off by default (every crash counts); "
+        "on restricts every figure on the page to crashes with an injury or "
+        "death.\n"
+        "- **Date range** — restricts observed figures (crashes, injured, "
+        "killed) to a window. The Empirical Bayes estimate itself is fit "
+        "once over its own multi-year training/holdout window and does not "
+        "change with this picker — see the drawer's 'Expected harm' caption.\n"
+        "- **Drawer** — detail for the selected corridor: observed crashes, "
+        "injuries, deaths, its Empirical Bayes estimate, a correctable road-"
+        "class control, and the share of crashes other tools drop for lacking "
+        "a borough.\n"
+        "- **Ranked corridors** — the same figures as the map, in a table. "
+        "The accessible equivalent of the map, not a secondary view.\n"
+        "- **Countermeasure & budget estimator** — once a corridor is "
+        "selected, branches to the treatments valid for its road class "
+        "(guardrails on a highway, road diets on a surface street, never the "
+        "reverse) with editable, FHWA-sourced CMFs and costs.\n"
+        "- **Executive summary export** — a PDF carrying the selection, "
+        "filters, costs, CMFs and caveats together, blocked if any section "
+        "above is in a degraded state."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +227,9 @@ with c3:
     picked_range = st.date_input(
         "Date range", value=(coverage_lo, coverage_hi),
         min_value=coverage_lo, max_value=coverage_hi,
+        help="Restricts observed figures (crashes, injured, killed) to this "
+             "window. Does not change the Empirical Bayes estimate, which is "
+             "fit once over its own training/holdout years.",
     )
 
 date_from, date_to = normalize_date_range(picked_range, coverage_lo, coverage_hi)
@@ -182,9 +265,21 @@ with map_col:
         st.info("No scored cells available. Run scripts/fit_eb.py to build "
                 "data/raw/eb_cells.parquet.")
     else:
+        show_3d = st.toggle(
+            "Show as 3D height", value=False,
+            help="Off (default): a flat heat map — easiest to read city-wide "
+                 "patterns. On: also extrudes each cell by its expected harm.",
+        )
+
+        # eb_estimate is heavily right-skewed (median ~1.2, 98th pct ~18) —
+        # a linear colour scale leaves almost every cell looking the same
+        # shade of green with a handful of red outliers. log1p spreads the
+        # whole range out so the map actually reads as a gradient rather than
+        # a scatter of hot spots on a flat green field.
         vmax = max(cells["eb_estimate"].quantile(0.98), 0.01)
+        log_vmax = math.log1p(vmax)
         cells = cells.assign(
-            norm=(cells["eb_estimate"].clip(upper=vmax) / vmax).clip(0, 1)
+            norm=(cells["eb_estimate"].clip(upper=vmax).map(math.log1p) / log_vmax).clip(0, 1)
         )
 
         def _color(n: float) -> list[int]:
@@ -194,41 +289,64 @@ with map_col:
             frac = n * (len(stops) - 1) - idx
             a, b = stops[idx], stops[idx + 1]
             return [int(a[i] + (b[i] - a[i]) * frac) for i in range(3)] + [
-                int(90 + 140 * n)
+                int(140 + 100 * n)
             ]
 
         cells = cells.assign(color=cells["norm"].map(_color))
-        layer = pdk.Layer(
+
+        layers = []
+        if BOROUGH_BOUNDARIES.exists():
+            # Thin outline only, no fill — geographic context (which borough
+            # is which) without competing with the severity colour channel.
+            layers.append(pdk.Layer(
+                "GeoJsonLayer",
+                data=load_borough_boundaries(),
+                stroked=True, filled=False,
+                get_line_color=[139, 152, 165, 160],
+                line_width_min_pixels=1,
+            ))
+        layers.append(pdk.Layer(
             "ColumnLayer",
             data=cells,
             get_position="[lon_c, lat_c]",
-            get_elevation="eb_estimate",
-            elevation_scale=400,
-            radius=45,
+            get_elevation="eb_estimate" if show_3d else 0,
+            elevation_scale=500 if show_3d else 0,
+            extruded=show_3d,
+            radius=55,
             get_fill_color="color",
             pickable=True,
             auto_highlight=True,
+        ))
+        view_state = pdk.ViewState(
+            latitude=40.72, longitude=-73.94, zoom=9.6,
+            pitch=35 if show_3d else 0,
         )
-        view_state = pdk.ViewState(latitude=40.72, longitude=-73.94, zoom=9.6, pitch=35)
         deck = pdk.Deck(
-            layers=[layer],
+            layers=layers,
             initial_view_state=view_state,
-            map_style=None,
-            tooltip={"text": "{canonical}\nExpected harm: {eb_estimate}\nObserved (training): {observed}"},
+            map_provider="carto",
+            map_style="dark",
+            tooltip={"text": "{canonical}\nExpected harm: {eb_estimate}\nObserved (training window): {observed}"},
         )
         st.pydeck_chart(deck, use_container_width=True, height=560)
 
-    st.markdown(
-        '<div class="legend">'
-        '<div class="legend-item"><span class="legend-swatch" '
-        'style="background:var(--sev-1)"></span>Low expected harm</div>'
-        '<div class="legend-item"><span class="legend-swatch" '
-        'style="background:var(--sev-4)"></span>High expected harm</div>'
-        '<div class="legend-item">Height and colour both encode the '
-        "Empirical Bayes estimate, per cell (~111m × 84m)</div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
+        p50, p90, p98 = (cells["eb_estimate"].quantile(q) for q in (0.5, 0.9, 0.98))
+        st.markdown(
+            '<div class="legend">'
+            '<div class="legend-item">Expected harm per cell '
+            '(Empirical Bayes, log scale):</div>'
+            '<div class="legend-item" style="flex:1;min-width:220px">'
+            '<div style="height:10px;border-radius:4px;background:'
+            "linear-gradient(90deg,#2E7D5B,#C9A227,#D97706,#B4232C)\"></div>"
+            f'<div style="display:flex;justify-content:space-between;font-size:0.7rem">'
+            f"<span>0</span><span>median {p50:.1f}</span>"
+            f"<span>90th pct {p90:.1f}</span><span>98th pct+ {p98:.1f}</span></div>"
+            "</div>"
+            '<div class="legend-item">Cell ~111m × 84m. Height (if on) is the '
+            "same value as colour, not a second variable.</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
 with drawer_col:
     if selected_canonical is None:
@@ -400,13 +518,21 @@ else:
                         continue
 
                     st.markdown(f"**{t.label}**")
-                    include = st.checkbox("Include in total", key=f"inc::{key}::{selected_canonical}")
+                    include = st.checkbox(
+                        "Include in total", key=f"inc::{key}::{selected_canonical}",
+                        help="Adds this treatment's CAPEX and expected harm "
+                             "avoided into the 'Selected package' total below.",
+                    )
 
                     cmf = st.slider(
                         "CMF", min_value=0.10, max_value=1.00,
                         value=round(t.cmf, 2), step=0.01, key=f"cmf::{key}::{selected_canonical}",
-                        help=f"Source: FHWA CMF Clearinghouse{' (' + t.cmf_setting + ')' if t.cmf_setting else ''}. "
-                             "Star ratings vary by setting.",
+                        help="Crash Modification Factor: a multiplier on "
+                             "expected harm, not a percentage — 0.75 means "
+                             "harm falls to 75% of baseline (a 25% "
+                             f"reduction). Default is the FHWA-sourced value"
+                             f"{' (' + t.cmf_setting + ')' if t.cmf_setting else ''}. "
+                             "Drag lower to model a stronger treatment.",
                     )
                     if cmf >= 1.0:
                         st.caption("No expected effect at CMF 1.00. Move the slider "
@@ -418,11 +544,17 @@ else:
                     quantity = st.number_input(
                         f"Quantity ({t.unit})" if t.unit else "Quantity",
                         min_value=0.0, value=1.0, step=1.0, key=f"qty::{key}::{selected_canonical}",
+                        help=f"How many {t.unit or 'units'} of this treatment "
+                             "you're planning. Multiplies the unit cost below "
+                             "to get total CAPEX.",
                     )
                     unit_cost = st.number_input(
                         "Unit cost (USD) — planning default, replace with your agency's figure",
                         min_value=0.0, value=float(t.unit_cost_usd), step=100.0,
                         key=f"cost::{key}::{selected_canonical}",
+                        help="Editable planning default, not a fact — see "
+                             "this treatment's source note below for where "
+                             "the starting figure came from.",
                     )
                     if unit_cost == 0:
                         st.caption("Enter a unit cost to see cost per crash avoided.")
