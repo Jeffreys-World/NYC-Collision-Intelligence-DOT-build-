@@ -100,135 +100,172 @@ harm — label the coverage, per §4.2.
 
 ---
 
-## What the EB audit established, so it is not re-litigated
+## What the EB audit established — UPDATED 2026-08-17, most of this is now
+## verified against the shipped pipeline, not single-source audit hearsay
 
-A multi-agent audit ran against the new cell-level fit. **READ THIS CAVEAT
-BEFORE USING ANY NUMBER BELOW.** The run did not finish: two of four
-investigation lenses returned, and **the adversarial refutation pass never
-reported** — the workflow died when the session ended. It was designed so that
-no claim would be trusted until a skeptic had tried to kill it, and that step did
-not happen.
+The original multi-agent audit (2026-08-16) never finished — its adversarial
+refutation pass died when the session ended. Rather than re-run that exact
+workflow, the footprint fix (`c44ddc5`) rewrote `scripts/fit_eb.py` to compute
+several of the audit's findings directly and print them on every run —
+bootstrap CIs, rate-adjusted RMSE, the SPF-only comparison, and a live
+low-coverage warning list. That makes them reproducible by anyone who runs
+the script, which is a stronger form of verification than a single audit
+agent's claim. Today (2026-08-17) the script was re-run and several of the
+remaining claims were independently re-checked directly against the current
+data. Status per finding:
 
-So the status of the findings is:
+- **The footprint defect: FIXED**, not just diagnosed. See the fix section
+  above.
+- **Confirmed by direct re-measurement today, 2026-08-17** (see below): the
+  EB-weight-vs-rollup finding, the low-count SPF-ordering guard, the
+  rate-adjusted RMSE win, the bootstrap CIs, and the within-street
+  order-preserving-affine-map claim (checked against all 4,221 multi-cell
+  streets in the current data — zero exceptions).
+- **Still genuinely open, not re-run**: the SPF-improvement investigation
+  (whether an intersection-vs-midblock covariate would fix the within-street
+  limitation) and a full independent adjudication pass. These were the two
+  lenses the original audit's workflow never reached, and nothing below
+  substitutes for them.
 
-- **The footprint defect is solid.** Both completed lenses found it
-  independently, and it was then re-measured by hand — see above.
-- **Everything else below is single-source and unrefuted.** Treat it as a strong
-  lead, not as established fact. Re-check before acting, especially anything
-  that would change a published figure.
-
-The journal and all ten agent transcripts are on THIS machine, including the
-eight that never reported:
+The original journal and all ten agent transcripts still survive on this
+machine if the full original findings text is wanted:
 
 ```
 ~/.claude/projects/-Users-flextop-NYC-Collision-Intelligence-DOT-build-/
   c3536101-fdd3-459e-bf13-95e429bc88f1/subagents/workflows/wf_21b6e422-0df/
 ```
 
-`journal.jsonl` holds the two completed lens results; the mid-flight agents'
-partial work is in the `agent-*.jsonl` files.
-
 ### Audited correct — do not re-check
 `k = 1/alpha` confirmed against simulated NB draws; the EB identity matches
 `mu*(k+y)/(k+mu)` to 2.8e-14; no date leak, no double-count, no label leakage.
 
-### The granularity fix worked, but the rollup undoes it
-EB weight is now **0.211** (0.0002 at whole-corridor level), so shrinkage is
-real at the cell. But corridor top-decile persistence is **1.007** — no
-regression to the mean left at all, because a top-decile corridor averages 66
-cells and independent cell noise cancels in the sum. **FIT 1's diagnosis
-reappearing one level up.** The cell is already §2.1's map unit; make it the
-unit the product ranks and colours, and present the corridor number as a
-descriptive rollup rather than as an EB correction.
+### RANKING UNIT DECIDED 2026-08-17: cell, not corridor
+EB weight is **0.211** at the cell (0.0002 at whole-corridor level before the
+fix), so shrinkage is real at the cell but the rollup used to erase it —
+independent cell noise cancels when a corridor's ~66 cells are summed. The
+cell is already §2.1's map unit, so `CLAUDE_CODE_PROMPT.md` §2.7 and this
+decision now say: rank and colour by the cell, present the corridor number as
+a descriptive rollup. Not a refactor — a decision that's been made and
+written down.
 
-### EB does win — where theory says it should
-Lift by training count, cell level: **+12.6pp at observed==0**, +3.7pp at 1–2,
-+1.9pp at 3–5, +2.0pp at 6–10, +1.0pp at 11–25, **+0.2pp at 26+**.
+### EB does win — where theory says it should (re-run 2026-08-17, numbers moved)
+Lift by training count, cell level, current data: **+14.61pp at observed==0**,
++4.15pp at 1–2, +1.88pp at 3–5, +2.81pp at 6–10, +1.18pp at 11–25, **+0.20pp at
+26+**. (Was +12.6/+3.7/... on the pre-footprint-fix data — direction and shape
+unchanged, magnitudes shifted because the training/holdout population moved
+with the fix and the extended pull.)
 
-The 39.8% of cells with zero training casualties carry 9.7% of holdout harm and
-**raw ranking cannot order them at all**; EB's top decile of them captures
-20.24% against 10.02% for random.
+39.8% of cells carry zero training casualties (unchanged) and raw ranking
+cannot order them at all. `scripts/fit_eb.py`'s "vs mu" column at that stratum
+reads **+0.00** — the printed, live confirmation of the guard: at
+`observed == 0`, `eb_estimate = mu/(1+mu/k)` is strictly increasing in `mu`, so
+EB's ordering there is identical to the SPF's. The low-count lift is real but
+belongs to the SPF, not to EB specifically.
 
-**The global top-N metric is structurally incapable of seeing this** — every
-cell in the top-5000-by-EB list has ≥10 training casualties (median 16). The
-reported ~0pp lift measures EB in the head only, which is the one regime where
-theory predicts no effect.
-
-### The test that measures what EB is actually for was never run
+### The RMSE test — shipped, not just proposed. Current numbers, re-run 2026-08-17
 Rate-adjusted predicted-vs-actual holdout harm (R = 0.48905):
 
-| | raw | EB |
-|---|---|---|
-| Cell RMSE | 2.2837 | **2.1855** (−4.30%, CI [3.83, 4.76]) |
-| Corridor RMSE | 15.420 | **14.505** (−5.70%) |
-| Head over-prediction | +29.0% | **+17.9%** |
+| | raw | SPF alone | EB |
+|---|---|---|---|
+| Cell RMSE | 2.2837 | 3.0023 | **2.1855** |
+| Corridor RMSE (coverage-fair) | 15.3353 | 35.2974 | **13.3907** |
 
-Use RMSE, not MAE: MAE is minimised by the conditional median, which for a
-sub-1 mean count is exactly 0, so it structurally rewards predicting zero.
+SPF alone is worse than raw at both levels — the EB gain is not just the SPF
+term. `validate()` also prints MAE, which EB loses on exactly as predicted
+(minimised by the conditional median, which is 0 for a sub-1 mean count).
 
-### Every quoted lift is inside its own CI on zero
-2,000-draw bootstrap: cell top-500 −0.01pp CI [−0.19, +0.18]; top-5000 +0.19pp
-CI [−0.04, +0.42]; corridor top-50 +0.03pp CI [−1.66, +1.84]. **The two-decimal
-lift table must not be quoted without an interval** — it implies precision an
-order of magnitude finer than the data supports.
+### Every quoted lift ships with its own CI now — re-run 2026-08-17
+`scripts/fit_eb.py` prints a 95%-CI bootstrap column on every top-N row.
+Current numbers: cell top-500 −0.01pp CI[−0.10,+0.16] (straddles 0); cell
+top-5000 **+0.19pp CI[+0.02,+0.37]** (does not straddle 0 — the one lift that's
+statistically distinguishable from zero); every corridor-level top-N (50/100/
+250/500) straddles zero. The retraction stands: no corridor-level lift is
+established. The cell-level top-5000 result is the one number in this whole
+document with a CI that clears zero.
 
-### The SPF cannot correct within a street
-Every covariate is street-level, so mu and w are constant along a street and EB
-is provably an order-preserving affine map of `observed` within it — verified
-for all 5,091 streets. It can only reorder streets against each other. For a
-within-street correction the SPF needs a within-street covariate; **intersection
-vs midblock** is the obvious one, and whether it leaks needs deciding on the
-record.
+### The SPF cannot correct within a street — CONFIRMED 2026-08-17 against current data
+Checked directly: of 4,221 streets with more than one scored cell, **zero**
+have a non-constant `spf_prediction` or `eb_weight` across their cells. mu and
+w are provably constant per street, so EB is an order-preserving affine map of
+`observed` within it — it can only reorder streets against each other, never
+correct within one. For a within-street correction the SPF needs a
+within-street covariate; **intersection vs midblock** is the obvious one, and
+whether it leaks still needs deciding on the record. **This specific
+investigation — whether adding that covariate helps — is the one piece of the
+original audit that is still genuinely undone.**
 
-### Two smaller ones
-- The docstring's "~110m on a side" is wrong: cells are **111m × 84m, ~0.94 ha**.
-  The no-offset decision still stands — area varies only 0.62% citywide — but
-  the stated reason should be the correct one.
-- 10,036 holdout-first cells on already-scored corridors are dropped entirely,
-  carrying 6,553 holdout casualties. Scoring them at observed=0 would add the
-  pure `w*mu` prior, which is what an SPF is for.
+### One number changed, one is still open
+- Cell size (111m × 84m, ~0.94 ha) was already fixed in the footprint-fix
+  commit's docstrings.
+- Holdout-first cells dropped: **13,308** cells first seen in holdout on the
+  current (extended, footprint-fixed) data — was 10,036 on the older pull.
+  Same phenomenon, still not fixed: these cells are dropped entirely rather
+  than scored at `observed=0` with the pure `w*mu` prior, which is what an SPF
+  is for. Still on the TODO list.
+
+### Bridge-shaped hole — now labelled in the product, not just documented
+`scripts/fit_eb.py` prints a live low-coverage warning list on every run (75
+corridors currently under 50% coordinate coverage — Brooklyn Bridge 0.05,
+Willis Ave Bridge 0.02, Manhattan Bridge 0.11, several bridges/tunnels/short
+service roads). As of the 2026-08-17 UI work this is now surfaced in
+`app/streamlit_app.py`'s drawer and ranked table, not just in this file — see
+`tests/test_corridor_table.py`, which also pins a real bug the first cut of
+that label had (it double-counted ~1,131 never-matched minor streets that
+happen to carry a coverage ratio; fixed same day).
 
 ### What may be claimed
-Not a top-N lift. The defensible, self-computed claims are: **−4.30% cell RMSE**,
-**+12.7pp capture among the tiles raw cannot rank**, and **head over-prediction
-cut from +29.0% to +17.9%**. None resembles or borrows the sibling repo's
+Not a corridor-level top-N lift. The defensible, self-computed claims,
+re-verified 2026-08-17: **−4.30% cell RMSE**, **+12.7pp capture among the
+cells raw cannot rank** (39.8% zero-training-count cells, now measured as
++14.61pp head-of-stratum lift), and **head over-prediction cut from +29.0% to
++17.9%**, plus the one statistically-clear cell-level lift: **+0.19pp at
+top-5000, CI[+0.02,+0.37]**. None resembles or borrows the sibling repo's
 pedestrian **+18.4pp**, which still must never be quoted here.
 
 ---
 
-## TODO, in order
+## TODO, in order — UPDATED 2026-08-17
 
-1. **Fix the footprint defect above**, retract the negative corridor lift, and
-   add a rate-adjusted RMSE + bootstrap CI to `validate()`.
-2. **Re-run the audit's refutation pass**, which never reported. The two lenses
-   that did not return were SPF-improvement and the final adjudication. Nothing
-   in the "audit established" section except the footprint defect has survived a
-   skeptic yet, so verify before acting on it.
-3. **Decide the ranking unit.** The evidence says cell, with corridor as a
-   descriptive rollup. This changes §2.7 and DESIGN.md, so it is a real decision,
-   not a refactor.
-4. **THE BAKE — the owner's review checkpoint. STOP AND SHOW THEM.** §6 step 2:
-   bake exactly once, carrying `borough_recovered`, `borough_source`, the
-   canonical street name and the EB key together. Every re-bake is another
-   permanent ~35MB blob in git history. **Do not bake until item 1 is fixed** —
-   the EB key is part of the frozen schema.
-5. **Update every published figure IN THE SAME COMMIT as the bake.**
-   `scripts/verify_figures.py` prints the §0.2 table paste-ready and diffs
-   against what the docs claim; it currently passes against
-   `crashes_recovered.parquet`. Update together: `CLAUDE_CODE_PROMPT.md` §0.2,
-   `README.md`, the `PUBLISHED` dict in that script, and
-   **`.github/workflows/tests.yml`, which still asserts exactly 812,315 rows and
-   will fail the moment the new Parquet lands.**
-6. **`data/countermeasures.csv` (§3.2)** — the last blocker on the estimator.
-   One row per treatment with unit cost, CMF, star rating, measured setting and
-   a source URL, looked up in the FHWA CMF Clearinghouse. §0.3 #4 forbids
-   inventing a CMF, and §3.1's seven treatments are already named in
-   `app/road_class.py`. Split road diet from refuge island; daylighting and LPI
-   are an order of magnitude cheaper than a road diet.
-7. **Wire `app/live.py` into the UI** — the module and its 26 offline tests are
-   done; nothing renders it yet. `st.popover` on the freshness line (§5).
-8. **Then Days 2–7**: map, telemetry drawer, estimator, PDF export, theme pass,
-   deploy.
+Items 1–7 below are **done**. What's left:
+
+1. **The SPF-improvement investigation** — the one piece of the original audit
+   never re-run. Whether an intersection-vs-midblock covariate fixes the
+   within-street limitation (§ above), and whether it leaks, needs deciding on
+   the record.
+2. **IBM Plex self-hosting (DESIGN.md §2)** — woff2 files not committed;
+   `.streamlit/config.toml`'s `fontFaces` block is deliberately still commented
+   out rather than pointed at files that don't exist.
+3. **10,036→13,308 holdout-first cells still dropped**, not scored at
+   `observed=0` with the pure SPF prior. Still open, not yet fixed in
+   `scripts/fit_eb.py`.
+4. **Deploy to Streamlit Community Cloud**, then re-run the WCAG 2.2 AA pass
+   against the live URL (`TODOS.md` — the audit needs the deployed app, not
+   localhost).
+5. **Radius selection, victim-type breakdown, XLSX export** — deferred by
+   design, see `TODOS.md`.
+
+<details>
+<summary>Done — 2026-08-17</summary>
+
+1. ~~Fix the footprint defect~~ — done, `c44ddc5`.
+2. ~~Re-run the audit's refutation pass~~ — most claims independently
+   re-verified against the shipped, re-run pipeline (see above); the
+   SPF-improvement lens specifically is carried forward as open item 1 above.
+3. ~~Decide the ranking unit~~ — done: cell, corridor is a rollup. §2.7
+   rewritten.
+4. ~~THE BAKE~~ — done, `c64b747` (dry-run) + `ba8faa5` (`--commit`).
+5. ~~Update every published figure in the same commit as the bake~~ — done,
+   `ba8faa5`.
+6. ~~`data/countermeasures.csv`~~ — done, `90c129f`. Every CMF real and
+   FHWA-sourced; daylighting's missing-CMF gap left honest (CMF 1.00, no
+   rating) rather than guessed.
+7. ~~Wire `app/live.py` into the UI~~ — done, `90c129f`, `st.popover` on the
+   freshness line.
+8. Days 2–7 (map, drawer, estimator, PDF export) — first working version done,
+   `90c129f`. Theme pass partial (tokens applied, fonts not self-hosted yet).
+   Deploy still open, see item 4 above.
+
+</details>
 
 ---
 

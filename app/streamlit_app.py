@@ -35,6 +35,15 @@ from app.data import (
 ROOT = Path(__file__).resolve().parent.parent
 FEATURED_CSV = ROOT / "data" / "featured_corridors.csv"
 
+# scripts/fit_eb.py prints a warning list of corridors whose EB estimate sits
+# over a badly incomplete coordinate footprint (bridges and tunnels above
+# all — NYPD does not geocode crashes on a span, see the bridge-shaped-hole
+# finding in NEXT-SESSION.md). 0.5 is the same cut point that list uses: below
+# it, a corridor's `eb_estimate` is a real number over less than half its
+# actual harm, and presenting it without saying so is exactly the §4.2
+# failure the coverage columns exist to prevent.
+LOW_COVERAGE_THRESHOLD = 0.5
+
 st.set_page_config(page_title="NYC Collision Intelligence — DOT", layout="wide")
 theme.inject()
 
@@ -273,6 +282,16 @@ with drawer_col:
                     "Expected harm", f"{eb_row.iloc[0]['eb_estimate']:.1f}",
                     "Empirical Bayes, cell-level rollup — not the ranking unit",
                 )
+                coverage = eb_row.iloc[0]["eb_coverage"]
+                if coverage is not None and coverage < LOW_COVERAGE_THRESHOLD:
+                    st.warning(
+                        f"Only {coverage:.0%} of this corridor's casualties carry "
+                        "coordinates, so the estimate above is computed over a "
+                        "badly incomplete footprint — most likely a bridge or "
+                        "tunnel span, which NYPD does not geocode. Treat "
+                        "'expected harm' here as a lower bound, not a full "
+                        "estimate."
+                    )
             else:
                 st.caption("Observed only — no Empirical Bayes match for this corridor.")
 
@@ -301,6 +320,16 @@ if table.empty:
 else:
     show = table.copy()
     show["expected harm"] = show["eb_estimate"].where(show["eb_matched"]).round(1)
+    # eb_coverage is a data-completeness ratio and can be populated even for
+    # an UNMATCHED corridor (no EB fit at all) — gate on eb_matched too, or
+    # thousands of never-scored minor streets get flagged as "low coverage"
+    # alongside the handful of real bridge/tunnel cases this is meant to catch.
+    low_coverage = (show["eb_matched"] & show["eb_coverage"].notna()
+                    & (show["eb_coverage"] < LOW_COVERAGE_THRESHOLD))
+    show["expected harm"] = show["expected harm"].astype("string")
+    show.loc[low_coverage, "expected harm"] = (
+        show.loc[low_coverage, "expected harm"] + " ⚠ low coverage"
+    )
     show = show.rename(columns={
         "corridor": "corridor", "crashes": "crashes",
         "casualty_crashes": "casualty crashes", "injured": "injured",
@@ -311,6 +340,14 @@ else:
               "records other tools drop", "expected harm"]],
         use_container_width=True, hide_index=True, height=320,
     )
+    if low_coverage.any():
+        st.caption(
+            f"⚠ low coverage: {int(low_coverage.sum())} corridor(s) above have "
+            f"under {LOW_COVERAGE_THRESHOLD:.0%} coordinate coverage on their "
+            "casualties — usually a bridge or tunnel span NYPD does not "
+            "geocode. Their expected-harm figure is a lower bound, not a full "
+            "estimate."
+        )
 
 
 # ---------------------------------------------------------------------------

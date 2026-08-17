@@ -64,8 +64,17 @@ commands.
 
 ## Top of the list, in order
 
-- [ ] **Re-run the audit's refutation pass** before trusting anything under
-  "What the EB audit established" in `NEXT-SESSION.md` beyond the footprint fix.
+- [x] **Re-run the audit's refutation pass** — mostly done differently than
+  planned: rather than re-running the exact multi-agent workflow, the
+  footprint fix made several claims directly reproducible from
+  `scripts/fit_eb.py`'s own output, and the rest were independently
+  re-checked against current data on 2026-08-17 (within-street
+  order-preservation confirmed on all 4,221 multi-cell streets; RMSE,
+  bootstrap CIs and the low-count SPF-ordering guard all re-run with current
+  numbers). See `NEXT-SESSION.md`. **One piece is still genuinely open**: the
+  SPF-improvement investigation (would an intersection-vs-midblock covariate
+  fix the within-street limitation?) — that lens of the original audit never
+  ran and nothing above substitutes for it.
 - [ ] **IBM Plex self-hosting (DESIGN.md §2)** — woff2 files not committed yet;
   `.streamlit/config.toml`'s `fontFaces` block stays commented out until they
   land, on purpose (a broken font path silently falls back to the system
