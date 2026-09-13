@@ -1,7 +1,8 @@
 # TODOS
 
-Deferred during the engineering plan review on 2026-08-15 and the design plan review on
-2026-08-16. Every item here was cut on purpose. Read the reason before reversing one.
+Deferred during the engineering plan review on 2026-08-15, the design plan review on
+2026-08-16, and the engineering plan review on 2026-09-12. Every item here was cut on
+purpose. Read the reason before reversing one.
 
 ## Accessibility
 
@@ -128,6 +129,36 @@ files and its journal did not survive the move to macOS; the contract summary in
 
 ## Interaction
 
+### The interactive reveal — "See what other tools show"
+
+**What:** A toggle on the first screen that re-renders the map, drawer and ranked table
+against `borough_source = 'reported'` rows only, so the viewer watches the highway network
+empty out. Deferred at the 2026-09-12 engineering review (decision 10D). PR1 ships the
+static version: a table stating the same finding in fixed numbers, no interaction.
+
+**Why:** The finding is the whole hook — seven NYC highways show zero traffic deaths in the
+standard view and the Belt Parkway has fifty-six; across the 12 featured corridors the
+standard view hides 225 of 288 deaths. A viewer who flips the control themselves believes it
+in a way a table cannot match. It was deferred, not cut, because the static table may already
+land, and the reveal costs a second query path through every component on the page.
+
+**Context:** The revival trigger is specific: **open the deployed link cold, as a stranger
+would, and judge whether the static table lands without it.** If the table reads as a claim
+rather than a demonstration, build the reveal. Start at `docs/designs/ui-reveal-cold-open.md`
+— Recommended Approach, then Implementation notes; the design work is done, the wireframe in
+`docs/designs/wireframe-reveal.html` shows both states with measured figures. The engineering
+shape was settled at the same review: the map is split into two pydeck layers (decision 1A)
+so the reveal swaps a layer rather than re-serialising 77,747 cells, and the drawer figures
+come from a SQL aggregate behind a bounded cache (decision 2A). The trap to test is selection
+survival: the reveal re-sorts the ranked table, and `st.dataframe` returns selection by
+positional index, so the selected corridor must be re-resolved by canonical name, not row
+number. Edge case that is not a bug: 1,657 of 8,931 canonicals have no reported row at all
+and must render explicit zeros, not blanks.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** deploy (the trigger is a cold look at the live URL), and PR1 landing first
+
 ### Radius selection (100–2000m)
 
 **What:** Slider-driven circular selection on the map, alongside point-click and the
@@ -160,6 +191,59 @@ street alias table works — an explicit committed mapping with tests, not regex
 **Effort:** M
 **Priority:** P3
 **Depends on:** None
+
+## Testing
+
+### Browser end-to-end tests for the map and the reveal
+
+**What:** Real-browser tests that drive the deployed app: click a ranked-table row and assert
+the drawer follows, flip the reveal and assert the map changes, select a corridor and assert
+the selection survives the re-sort. Deferred at the 2026-09-12 engineering review (decision
+6A), which scoped PR1 tests to pure logic plus three regressions.
+
+**Why:** The three highest-risk behaviours in this app are all cross-component: selection
+identity across a re-sort, the map cache key, and the drawer agreeing with the table. Unit
+tests over extracted pure functions cover the arithmetic but cannot prove the wiring. Every
+regression this app has shipped so far (ISSUE-001, ISSUE-002) was a wiring or rendering bug
+that a unit test would not have caught.
+
+**Context:** The blocker is environmental, not philosophical: headless browsers in this
+repo's sandbox have no GPU and cannot create a WebGL context, so the pydeck map cannot be
+screenshotted or asserted against in CI. This is recorded in `DELIVERABLES.md`. Two ways
+forward, and the choice is the first thing to make: run the suite against the deployed
+Streamlit Cloud URL from a runner that does have a GPU or a software GL fallback
+(`--use-gl=swiftshader`), or keep CI GPU-free and assert only on the DOM — the ranked table
+and drawer read from the same queries the map does, so the data path is testable even when
+the canvas is not. The interaction list is already written: see the "Key Interactions to
+Verify" and "Critical Paths" sections of
+`~/.gstack/projects/Jeffreys-World-GitHub/jeffrey-main-eng-review-test-plan-20260912-201000.md`,
+which is shaped for `/qa` to consume directly.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** deploy, and PR1's pure-logic extraction landing first
+
+## Dependencies
+
+### Confirm plotly is gone and stays gone
+
+**What:** `requirements.txt` pins `plotly>=5.24` and the repo has zero references to it.
+PR1 removes the pin (decision 3A). This item is the follow-up: if a chart is ever wanted in
+the drawer, decide deliberately whether to re-add plotly or use Streamlit's built-in charts.
+
+**Why:** `requirements.txt` is what Streamlit Community Cloud installs. An unused pin is
+install time and a dependency-surface claim the app does not make. It also misleads the next
+person into thinking a charting library is already the house choice.
+
+**Context:** `sql/selection_rows.sql` carries a comment citing three drawer charts that do
+not exist — that comment is likely where the pin came from. Streamlit's native
+`st.bar_chart` / `st.line_chart` cover what those three charts described and add nothing to
+the install. Re-add plotly only if a chart needs interaction the built-ins cannot do, and if
+so, pin it in the same commit as the chart, never ahead of it.
+
+**Effort:** S
+**Priority:** P4
+**Depends on:** PR1
 
 ## Export
 
