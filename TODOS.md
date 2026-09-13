@@ -1,8 +1,108 @@
 # TODOS
 
 Deferred during the engineering plan review on 2026-08-15, the design plan review on
-2026-08-16, and the engineering plan review on 2026-09-12. Every item here was cut on
-purpose. Read the reason before reversing one.
+2026-08-16, and the engineering plan review on 2026-09-12. Every item below "Next up" was cut
+on purpose. Read the reason before reversing one.
+
+**Next up** is the exception: scheduled work, not deferrals. PR1 landed on 2026-09-13
+(`511e52c`..`45430ce`, 374 tests). PR2 is what follows, and it is strictly serial — T10
+reorders the same file four PR1 tasks just edited, so these cannot run concurrently in
+worktrees. The conflict surface is the entire script.
+
+## Next up — PR2, the cold open
+
+Source: `docs/designs/ui-reveal-cold-open.md`, Implementation Tasks T10-T13. Do them in
+order.
+
+### T10 — Delete the nine-bullet expander and rebuild the first screen
+
+**What:** Remove the "What each part of this page does" expander (`streamlit_app.py:172-206`)
+and rebuild the first screen as: headline claim, freshness line, live-feed button at top
+level.
+
+**Why:** The expander is a manual for a page that should explain itself, and it sits between
+the reader and the finding. The 2026-09-13 design review scored hierarchy at D for exactly
+this reason: the completeness claim — the sentence this project exists for — renders at 13px
+in muted grey, below the fold, reachable only after using a dropdown, while the `<h1>` is
+44px. Nine bullets of chrome ahead of it makes that worse.
+
+**Context:** The expander carries a claim worth fixing rather than relocating. Line 187 says
+the casualty toggle "restricts every figure on the page". Before T3 that was flatly false —
+it restricted the drawer only. After T3 it is closer but still not true: every query over
+`crashes_filtered` is filtered, and the map is not, because the map reads `eb_cells` and the
+EB model is fit on casualties regardless of the toggle. The map's own caption already says
+so. Whatever replaces this copy should say "every observed figure below the map", or say
+nothing — checked against the code on 2026-09-13, not assumed.
+
+`feed.py`'s popover is already top-level as of T6, so the live-feed button does not need
+moving, only the copy around it. This is FINDING-001/-002 territory; the Design section below
+maps those to tasks.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** PR1 (landed)
+
+### T11 — The static finding table
+
+**What:** A fixed table stating the completeness finding in numbers: seven highways at zero,
+Belt Pkwy at 56, 225 of 288 deaths hidden across the 12 featured corridors. Computed once at
+load from the full Parquet, never over `crashes_filtered`.
+
+**Why:** This is decision 10's static answer to the reveal. The hook is "this person found
+something everyone else missed", and right now a cold reader has to operate the page to reach
+it. A table states it before they touch anything.
+
+**Context:** The "never over `crashes_filtered`" constraint is load-bearing and easy to get
+wrong now that T3 routes the casualty toggle through `base_view.sql` — every query reading
+that view moves when the user flips a filter, and a headline finding that changes when
+someone drags a date picker is not a finding. Compute it from the Parquet directly, cache it
+on the source label alone (`presentation.map_cache_key` is the shape to copy, not
+`query_cache_key`). Non-negotiable #1 applies with full force: every figure comes from
+`data/processed/crashes.parquet` and `scripts/verify_figures.py` must reproduce it. The
+wireframe at `docs/designs/wireframe-reveal.html` carries the measured figures; the fabricated
+EB estimates it also carries are recorded in Open Questions and must not be copied.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** T10
+
+### T12 — Preselect a corridor on load
+
+**What:** Open with a corridor already selected, so nothing renders a "select a corridor
+above" empty state. Satisfies success criterion 2.
+
+**Why:** Three empty states on first paint was the design review's structural finding, and it
+is the first thing a cold reviewer sees. A page that opens asking the visitor to do something
+before it shows them anything spends their attention on navigation instead of the finding.
+
+**Context:** Cheaper than it was. T5 made the selection a single stored canonical in
+`st.session_state[SELECTED_KEY]`, so preselection is seeding that key before the widgets
+render — not a new code path. Pick the corridor deliberately: Belt Pkwy is the finding's own
+example (5,186.0 expected harm, 12,755 crashes other tools drop) and is EB-matched, so the
+estimator and the export both open in a working state rather than a blocked one.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** T11
+
+### T13 — Deploy and look at it cold
+
+**What:** Deploy, then open the link as a stranger would, with no context, and judge whether
+the static table lands.
+
+**Why:** This is the decision-10 trigger, and it gates two other items in this file: "The
+interactive reveal" below, and the WCAG audit under Accessibility, which needs a live URL.
+It is also the only test of the thing the whole project is for. Nothing in the suite can
+answer it.
+
+**Context:** The judgement is specific, not a vibe check: does the table read as a
+*demonstration* or as a *claim*? If it reads as a claim, open the reveal item. Give it under
+a minute, the way a portfolio reviewer would. Worth pairing with the deferred design findings
+in the Design section, since a deploy is also what the accessibility audit is waiting on.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** T12
 
 ## Accessibility
 
@@ -149,15 +249,23 @@ rather than a demonstration, build the reveal. Start at `docs/designs/ui-reveal-
 `docs/designs/wireframe-reveal.html` shows both states with measured figures. The engineering
 shape was settled at the same review: the map is split into two pydeck layers (decision 1A)
 so the reveal swaps a layer rather than re-serialising 77,747 cells, and the drawer figures
-come from a SQL aggregate behind a bounded cache (decision 2A). The trap to test is selection
-survival: the reveal re-sorts the ranked table, and `st.dataframe` returns selection by
-positional index, so the selected corridor must be re-resolved by canonical name, not row
-number. Edge case that is not a bug: 1,657 of 8,931 canonicals have no reported row at all
-and must render explicit zeros, not blanks.
+come from a SQL aggregate behind a bounded cache (decision 2A).
+
+**What PR1 already did for this** (2026-09-13), so it is not re-derived: selection survival is
+solved. The reveal re-sorts the ranked table and `st.dataframe` returns a positional index, so
+a stored index would re-point — T5 resolves the click to a canonical at click time and stores
+only that (`presentation.canonical_at_row`, `tests/test_selection.py`). The bounded cache
+decision 2A asks for is in place (`data.MAX_QUERY_CACHE_ENTRIES`). The layer *seam* is in
+place too, but the second layer is **not built**: `eb_cells` carries no completeness column,
+so the completeness layer still needs the new SQL this item is really about. That SQL is the
+remaining work, not the plumbing around it.
+
+Edge case that is not a bug: 1,657 of 8,931 canonicals have no reported row at all and must
+render explicit zeros, not blanks.
 
 **Effort:** M
 **Priority:** P2
-**Depends on:** deploy (the trigger is a cold look at the live URL), and PR1 landing first
+**Depends on:** T13 (the trigger is a cold look at the live URL). PR1 has landed.
 
 ### Radius selection (100–2000m)
 
