@@ -26,6 +26,7 @@ everything that has a right answer.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from datetime import date
 
 import pandas as pd
@@ -172,6 +173,110 @@ def format_cost_per_unit(value) -> str:
     if abs(value) < 100:
         return f"${value:,.2f}"
     return f"${value:,.0f}"
+
+
+# ------------------------------------------------------- the corridor resolver
+#
+# Five call sites, one function, one stored key format. Before this existed,
+# three sites hand-built the f-string "road_class_override::{canonical}" and
+# two duplicated the eb_corridors lookup:
+#
+#     drawer heading        ─┐
+#     drawer road class     ─┤
+#     estimator branch      ─┼──►  resolve_corridor()  ──►  Corridor
+#     estimator eb lookup   ─┤          │
+#     PDF export            ─┘          ├─ .canonical    the join key, always
+#                                       ├─ .display      never None, never "None"
+#                                       └─ .override_key one spelling, one place
+#
+# The bug this closes is not the duplication, it is what the duplication hid.
+# 8,919 of 8,931 canonicals have no featured label. The drawer rendered
+# "## None" for every one of them, and the PDF came out headed "City-wide (no
+# corridor selected)" while scoped to a single corridor — a confidently wrong
+# document, which is worse than a blank one.
+
+@dataclass(frozen=True)
+class Corridor:
+    """One selected corridor, resolved once.
+
+    `canonical` is the join key used by every query. `display` is what a human
+    reads, and it is NEVER None: a corridor with no featured label displays as
+    its own canonical name, which is an ordinary street name in caps, not an
+    error state.
+    """
+
+    canonical: str
+    display: str
+    featured: bool
+
+    @property
+    def override_key(self) -> str:
+        """The session_state key holding this corridor's road-class override.
+
+        One spelling, one place. Three call sites used to hand-build this
+        f-string, and a typo in any of them would have silently dropped a
+        user's override on its way to the PDF — an export that is confidently
+        wrong about which treatment set applies.
+        """
+        return f"road_class_override::{self.canonical}"
+
+    def widget_key(self, prefix: str) -> str:
+        """Per-corridor widget keys (include / cmf / qty / cost).
+
+        Scoped to the canonical so switching corridors does not carry one
+        corridor's slider values onto another's estimator.
+        """
+        return f"{prefix}::{self.canonical}"
+
+
+def featured_label_for(featured: pd.DataFrame, canonical: str | None) -> str | None:
+    """The human label for a canonical, or None if it is not a featured one."""
+    if canonical is None or featured.empty:
+        return None
+    match = featured.loc[featured["canonical"] == canonical, "corridor"]
+    return str(match.iloc[0]) if len(match) else None
+
+
+def canonical_for_label(featured: pd.DataFrame, label: str | None) -> str | None:
+    """The canonical behind a dropdown label, or None."""
+    if label is None or featured.empty:
+        return None
+    match = featured.loc[featured["corridor"] == label, "canonical"]
+    return str(match.iloc[0]) if len(match) else None
+
+
+def resolve_corridor(featured: pd.DataFrame, canonical: str | None) -> Corridor | None:
+    """The one way to turn a canonical into something renderable.
+
+    None in, None out — a city-wide view is a real state, not an error. Every
+    other case returns a Corridor whose `display` is safe to put in a heading.
+    """
+    if not canonical:
+        return None
+    label = featured_label_for(featured, canonical)
+    return Corridor(canonical=canonical, display=label or canonical,
+                    featured=label is not None)
+
+
+def eb_row_for(table: pd.DataFrame, canonical: str | None) -> pd.Series | None:
+    """This corridor's row in the EB-joined corridor table, or None.
+
+    Two call sites did this lookup independently (the drawer and the
+    estimator), and they could disagree about whether a corridor was matched
+    if either one's filter drifted — the drawer showing an expected-harm
+    figure beside an estimator saying there is no EB match.
+    """
+    if canonical is None or table.empty:
+        return None
+    match = table[table["corridor"] == canonical]
+    return match.iloc[0] if len(match) else None
+
+
+def is_eb_matched(row: pd.Series | None) -> bool:
+    """§4.2: unmatched is a LABELLED state, never a silent downgrade to a raw
+    observed count still being called an estimate. A missing row and an
+    explicit eb_matched=False are the same answer here: no."""
+    return row is not None and bool(row["eb_matched"])
 
 
 # ---------------------------------------------------------------- cache keys

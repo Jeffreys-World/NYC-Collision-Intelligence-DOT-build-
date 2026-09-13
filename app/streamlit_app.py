@@ -281,11 +281,15 @@ with c3:
 date_from, date_to = normalize_date_range(picked_range, coverage_lo, coverage_hi)
 build_view(con, date_from, date_to)
 
-selected_corridor = None if picked_label.startswith("(none") else picked_label
-selected_canonical = None
-if selected_corridor is not None:
-    match = featured.loc[featured["corridor"] == selected_corridor, "canonical"]
-    selected_canonical = match.iloc[0] if len(match) else None
+picked_canonical = (None if picked_label.startswith("(none")
+                    else presentation.canonical_for_label(featured, picked_label))
+
+# ONE resolved value from here down. `selected` is None (city-wide) or a
+# Corridor carrying a display label that is never None and never the string
+# "None" — see presentation.resolve_corridor.
+selected = presentation.resolve_corridor(featured, picked_canonical)
+selected_canonical = selected.canonical if selected else None
+selected_corridor = selected.display if selected else None
 set_selection(con, selected_canonical)
 
 cache_key = presentation.query_cache_key(
@@ -387,13 +391,12 @@ with drawer_col:
         if casualty_only:
             detail_rows = detail_rows[detail_rows["is_fatal"] | detail_rows["is_injury"]]
 
-        rc = road_class.classify(selected_canonical)
-        override_key = f"road_class_override::{selected_canonical}"
-        st.markdown(f"## {selected_corridor}")
+        rc = road_class.classify(selected.canonical)
+        st.markdown(f"## {selected.display}")
         forced = st.selectbox(
             "Road class", ["highway", "bridge", "tunnel", "surface"],
             index=["highway", "bridge", "tunnel", "surface"].index(rc.road_class),
-            key=override_key,
+            key=selected.override_key,
             help=f"Basis: {rc.basis}" + (f" — {rc.note}" if rc.note else ""),
         )
         if forced != rc.road_class:
@@ -421,15 +424,15 @@ with drawer_col:
             theme.kpi_row("Injured", presentation.format_count(n_injured), "observed")
             theme.kpi_row("Killed", presentation.format_count(n_killed), "observed")
 
-            corridor_eb = query(con, "corridor_table", cache_key)
-            eb_row = corridor_eb[corridor_eb["corridor"] == selected_canonical]
-            if len(eb_row) and bool(eb_row.iloc[0]["eb_matched"]):
+            eb_row = presentation.eb_row_for(
+                query(con, "corridor_table", cache_key), selected.canonical)
+            if presentation.is_eb_matched(eb_row):
                 theme.kpi_row(
                     "Expected harm",
-                    presentation.format_expected_harm(eb_row.iloc[0]["eb_estimate"]),
+                    presentation.format_expected_harm(eb_row["eb_estimate"]),
                     "Empirical Bayes, cell-level rollup — not the ranking unit",
                 )
-                coverage = eb_row.iloc[0]["eb_coverage"]
+                coverage = eb_row["eb_coverage"]
                 if coverage is not None and coverage < LOW_COVERAGE_THRESHOLD:
                     st.warning(
                         f"Only {coverage:.0%} of this corridor's casualties carry "
@@ -519,25 +522,25 @@ if selected_canonical is None:
     )
     export_blocked_reasons.append("no corridor selected")
 else:
-    rc_final = road_class.classify(selected_canonical)
-    forced_road_class = st.session_state.get(f"road_class_override::{selected_canonical}",
-                                              rc_final.road_class)
+    rc_final = road_class.classify(selected.canonical)
+    forced_road_class = st.session_state.get(selected.override_key,
+                                             rc_final.road_class)
     treatments = road_class.treatments_for(
-        road_class.RoadClass(canonical=selected_canonical, road_class=forced_road_class,
-                              basis=rc_final.basis)
+        road_class.RoadClass(canonical=selected.canonical,
+                             road_class=forced_road_class,
+                             basis=rc_final.basis)
     )
 
-    corridor_eb = query(con, "corridor_table", cache_key)
-    eb_row = corridor_eb[corridor_eb["corridor"] == selected_canonical]
-    eb_matched = len(eb_row) and bool(eb_row.iloc[0]["eb_matched"])
+    eb_row = presentation.eb_row_for(
+        query(con, "corridor_table", cache_key), selected.canonical)
 
-    if not eb_matched:
+    if not presentation.is_eb_matched(eb_row):
         st.info("Observed only — no Empirical Bayes match for this corridor. "
                 "A CMF must multiply an EB baseline (§2.7), so the estimator "
                 "is unavailable until this corridor has a matched cell.")
-        export_blocked_reasons.append(f"{selected_corridor} has no EB match")
+        export_blocked_reasons.append(f"{selected.display} has no EB match")
     else:
-        baseline_eb = float(eb_row.iloc[0]["eb_estimate"])
+        baseline_eb = float(eb_row["eb_estimate"])
         countermeasures = estimator.load_countermeasures()
         cols = st.columns(min(len(treatments), 3))
         for i, key in enumerate(treatments):
@@ -551,14 +554,14 @@ else:
 
                     st.markdown(f"**{t.label}**")
                     include = st.checkbox(
-                        "Include in total", key=f"inc::{key}::{selected_canonical}",
+                        "Include in total", key=selected.widget_key(f"inc::{key}"),
                         help="Adds this treatment's CAPEX and expected harm "
                              "avoided into the 'Selected package' total below.",
                     )
 
                     cmf = st.slider(
                         "CMF", min_value=0.10, max_value=1.00,
-                        value=round(t.cmf, 2), step=0.01, key=f"cmf::{key}::{selected_canonical}",
+                        value=round(t.cmf, 2), step=0.01, key=selected.widget_key(f"cmf::{key}"),
                         help="Crash Modification Factor: a multiplier on "
                              "expected harm, not a percentage — 0.75 means "
                              "harm falls to 75% of baseline (a 25% "
@@ -575,7 +578,7 @@ else:
 
                     quantity = st.number_input(
                         f"Quantity ({t.unit})" if t.unit else "Quantity",
-                        min_value=0.0, value=1.0, step=1.0, key=f"qty::{key}::{selected_canonical}",
+                        min_value=0.0, value=1.0, step=1.0, key=selected.widget_key(f"qty::{key}"),
                         help=f"How many {t.unit or 'units'} of this treatment "
                              "you're planning. Multiplies the unit cost below "
                              "to get total CAPEX.",
@@ -583,7 +586,7 @@ else:
                     unit_cost = st.number_input(
                         "Unit cost (USD) — planning default, replace with your agency's figure",
                         min_value=0.0, value=float(t.unit_cost_usd), step=100.0,
-                        key=f"cost::{key}::{selected_canonical}",
+                        key=selected.widget_key(f"cost::{key}"),
                         help="Editable planning default, not a fact — see "
                              "this treatment's source note below for where "
                              "the starting figure came from.",
@@ -645,15 +648,21 @@ if export_blocked_reasons:
 else:
     from app.pdf_export import build_summary_pdf
 
+    # `selected.display` rather than the dropdown's label. They are the same
+    # string for the 12 featured corridors and different for the other 8,919:
+    # the dropdown cannot name those at all, so the label was None and the PDF
+    # came out headed "City-wide (no corridor selected)" while every figure in
+    # it was scoped to one street. A document that is confidently wrong about
+    # its own scope is worse than one that is blank.
     pdf_bytes = build_summary_pdf(
-        corridor=selected_corridor,
-        canonical=selected_canonical,
+        corridor=selected.display if selected else None,
+        canonical=selected.canonical if selected else None,
         date_from=date_from,
         date_to=date_to,
         casualty_only=casualty_only,
         coverage_hi=coverage_hi,
-        road_class_forced=st.session_state.get(
-            f"road_class_override::{selected_canonical}") if selected_canonical else None,
+        road_class_forced=(st.session_state.get(selected.override_key)
+                           if selected else None),
         treatments=selected_capex_rows,
     )
     st.download_button(

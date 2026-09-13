@@ -69,8 +69,19 @@ def build_summary_pdf(
     story = []
     story.append(Paragraph("NYC Collision Intelligence — Executive Summary", styles["Title"]))
     story.append(Spacer(1, 6))
-    story.append(Paragraph(
-        f"Corridor: {corridor or 'City-wide (no corridor selected)'}", styles["Heading2"]))
+    # "City-wide" is only true when NOTHING is selected. A canonical with no
+    # display label is a scoped report, and heading it "City-wide (no corridor
+    # selected)" is the worst available failure here: every figure below is
+    # already scoped to one street, so the document contradicts itself and
+    # does it confidently. 8,919 of 8,931 canonicals have no featured label,
+    # so this was the common case the moment anything but the dropdown could
+    # drive the selection.
+    #
+    # The caller resolves this (presentation.resolve_corridor never returns a
+    # None display). The guard stays because this function builds a document
+    # that leaves the building, and a second caller will exist.
+    heading = corridor or canonical or "City-wide (no corridor selected)"
+    story.append(Paragraph(f"Corridor: {heading}", styles["Heading2"]))
     if road_class_forced:
         story.append(Paragraph(f"Road class (analyst override): {road_class_forced}",
                                 styles["BodyText"]))
