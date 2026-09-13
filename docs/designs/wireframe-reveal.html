@@ -1,0 +1,303 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Approach B, The Reveal</title>
+<style>
+  /* Deliberately rough. System fonts, hairline borders, grey.
+     ONE deviation from a no-colour sketch: the severity ramp and the
+     completeness hatch ARE the design decision here, so they are shown
+     at real values. Everything else stays grey on purpose. */
+  :root{
+    --ink:#1a1d21; --dim:#5c6873; --faint:#8b98a5; --line:#c9d1d9;
+    --sev1:#2E7D5B; --sev2:#C9A227; --sev3:#D97706; --sev4:#B4232C;
+    --expected:#1D5FA3;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px;font:14px/1.5 system-ui,sans-serif;color:var(--ink);background:#fff}
+  h1.pagetitle{font-size:18px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin:0 0 20px;max-width:70ch}
+  .states{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+  .state{flex:1;min-width:460px;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .statehead{background:#f5f7f9;border-bottom:1px solid var(--line);padding:8px 12px;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dim)}
+  .app{padding:12px}
+
+  /* ---- title row ---- */
+  .titlerow{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .apptitle{font-size:15px;font-weight:700}
+  .apptag{font-size:10px;color:var(--faint)}
+  .toggle{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:10px;padding:2px 8px;white-space:nowrap}
+
+  /* ---- THE CLAIM: the hook, above the fold ---- */
+  .claim{margin:12px 0 0;padding:12px;border:1px solid var(--line);border-left:3px solid var(--ink);border-radius:4px;background:#fafbfc}
+  .claim .big{font-size:22px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+  .claim .big em{font-style:normal;color:var(--sev4)}
+  .claim p{margin:4px 0 0;font-size:12px;color:var(--dim)}
+
+  /* ---- THE REVEAL: one control, directly under the claim ---- */
+  .reveal{display:flex;gap:0;margin:10px 0 0;border:1px solid var(--line);border-radius:4px;overflow:hidden;font-size:11px}
+  .reveal div{flex:1;padding:7px 10px;text-align:center;cursor:default}
+  .reveal .on{background:var(--ink);color:#fff;font-weight:600}
+  .reveal .off{background:#fff;color:var(--dim)}
+  .hatch{background-image:repeating-linear-gradient(45deg,#8b98a5 0 2px,transparent 2px 5px)}
+
+  /* ---- TRUST: freshness + live check, hoisted out of the popover ---- */
+  .trust{display:flex;align-items:center;gap:8px;margin:10px 0 0;font-size:10.5px;color:var(--dim);flex-wrap:wrap}
+  .btn{border:1px solid var(--line);border-radius:3px;padding:3px 8px;font-size:10.5px;background:#fff;white-space:nowrap}
+  .btn.primary{border-color:var(--ink);font-weight:600;color:var(--ink)}
+
+  /* ---- control bar ---- */
+  .controls{display:flex;gap:6px;margin:12px 0 0;font-size:10.5px}
+  .controls div{border:1px solid var(--line);border-radius:3px;padding:5px 8px;color:var(--dim);background:#fff}
+  .controls .grow{flex:1}
+
+  /* ---- map + drawer ---- */
+  .body{display:flex;gap:10px;margin-top:8px;align-items:stretch}
+  .map{flex:0 0 66%;border:1px solid var(--line);border-radius:4px;padding:8px;position:relative;min-height:210px;background:#fbfcfd}
+  .maplabel{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+  .cells{display:grid;grid-template-columns:repeat(18,1fr);gap:2px;margin-top:8px}
+  .cells i{aspect-ratio:1;border-radius:1px;display:block}
+  .legend{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:9.5px;color:var(--dim)}
+  .ramp{height:7px;flex:1;border-radius:3px;background:linear-gradient(90deg,var(--sev1),var(--sev2),var(--sev3),var(--sev4))}
+  .ghost{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;color:var(--dim);background:rgba(255,255,255,.82);padding:20px}
+
+  .drawer{flex:1;border:1px solid var(--line);border-radius:4px;padding:9px;min-width:150px}
+  .dname{font-size:13px;font-weight:700}
+  .dclass{font-size:9.5px;color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:1px 5px;display:inline-block;margin:4px 0 6px}
+  .kpi{display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;border-bottom:1px solid #edf1f4;font-size:11px;font-variant-numeric:tabular-nums}
+  .kpi b{font-size:13px}
+  .kpi .q{display:block;font-size:9px;color:var(--faint);font-weight:400}
+  .kpi.eb b{color:var(--expected)}
+  .badge{margin-top:8px;border:1px solid var(--line);border-radius:3px;padding:5px 7px;font-size:10px;color:var(--dim)}
+
+  /* ---- ranked table, now the selection surface ---- */
+  .tablehead{display:flex;justify-content:space-between;align-items:baseline;margin:14px 0 4px}
+  .tablehead h3{font-size:12px;margin:0;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
+  .tablehead span{font-size:10px;color:var(--faint)}
+  table{width:100%;border-collapse:collapse;font-size:10.5px;font-variant-numeric:tabular-nums}
+  th{text-align:right;color:var(--faint);font-weight:500;border-bottom:1px solid var(--line);padding:3px 4px;font-size:9.5px}
+  th:first-child{text-align:left}
+  td{text-align:right;padding:3px 4px;border-bottom:1px solid #edf1f4}
+  td:first-child{text-align:left}
+  tr.sel td{background:#eef3f8;font-weight:600}
+  tr.dim td{color:var(--faint)}
+  .drop{color:var(--dim)}
+
+  .note{margin-top:20px;padding:12px 14px;border:1px solid var(--line);border-left:3px solid var(--sev3);border-radius:4px;background:#fffdf8;font-size:12px;max-width:95ch}
+  .note b{display:block;margin-bottom:4px}
+  .note ul{margin:6px 0 0;padding-left:18px;color:var(--dim)}
+  .note li{margin:3px 0}
+</style>
+</head>
+<body>
+
+<h1 class="pagetitle">Wireframe — Approach B, “The Reveal”</h1>
+<p class="sub">Rough sketch, real figures. Every number below is measured from
+<code>data/processed/crashes.parquet</code> (848,739 rows). Two states of the same screen,
+side by side, to show what the one new control does.</p>
+
+<div class="states">
+
+  <!-- ============ STATE 1: DEFAULT ============ -->
+  <div class="state">
+    <div class="statehead">State 1 — default on load</div>
+    <div class="app">
+
+      <div class="titlerow">
+        <div>
+          <div class="apptitle">NYC Collision Intelligence</div>
+          <div class="apptag">Chronic-risk prioritisation · NYC DOT</div>
+        </div>
+        <div class="toggle">Light mode ○</div>
+      </div>
+
+      <!-- the hook, first thing below the title -->
+      <div class="claim">
+        <div class="big">On the Belt Parkway, the standard NYC crash view shows <em>0</em> traffic deaths. There have been <em>56</em>.</div>
+        <p>861 of the city’s 1,945 traffic deaths (44.3%) sit in crashes with no recorded borough.
+           Every borough-level view drops them. This one keeps them.</p>
+      </div>
+
+      <!-- the reveal: one control, an invitation not a setting -->
+      <div class="reveal">
+        <div class="on">▨ Showing all crashes</div>
+        <div class="off">See what other tools show →</div>
+      </div>
+
+      <!-- trust, hoisted out of the popover -->
+      <div class="trust">
+        <span>Complete through 2026-06-11 · NYPD feed last carried 2026-06-11</span>
+        <span class="btn primary">↻ Check the live feed</span>
+        <span class="btn">Why? ▾</span>
+      </div>
+
+      <div class="controls">
+        <div class="grow">Featured corridors: Belt Pkwy ▾</div>
+        <div>Casualty only ☐</div>
+        <div>2019-01-01 → 2026-06-11</div>
+      </div>
+
+      <div class="body">
+        <div class="map">
+          <div class="maplabel">Expected harm · Empirical Bayes · all crashes</div>
+          <div class="cells" id="cellsFull"></div>
+          <div class="legend"><span>0</span><span class="ramp"></span><span>98th pct+</span></div>
+        </div>
+        <div class="drawer">
+          <div class="dname">Belt Pkwy</div>
+          <div class="dclass">HIGHWAY ▾</div>
+          <div class="kpi"><span>Crashes<span class="q">observed</span></span><b>13,063</b></div>
+          <div class="kpi"><span>Killed<span class="q">observed</span></span><b>56</b></div>
+          <div class="kpi eb"><span>Expected harm<span class="q">Empirical Bayes, cell rollup</span></span><b>5,186.0</b></div>
+          <div class="badge hatch"><span style="background:#fff;padding:0 3px">▨ 12,755 crashes other tools drop — <b>97.6%</b></span></div>
+        </div>
+      </div>
+
+      <div class="tablehead">
+        <h3>Ranked corridors — click a row to select</h3>
+        <span>8,931 corridors</span>
+      </div>
+      <table>
+        <tr><th>Corridor</th><th>Crashes</th><th>Killed</th><th>Dropped</th><th>Expected</th></tr>
+        <tr class="sel"><td>▸ Belt Pkwy</td><td>13,063</td><td>56</td><td class="drop">12,755 · 98%</td><td>5,186.0</td></tr>
+        <tr><td>Broadway</td><td>10,018</td><td>22</td><td class="drop">2,888 · 29%</td><td>3,100.2</td></tr>
+        <tr><td>Grand Central Pkwy</td><td>8,526</td><td>23</td><td class="drop">7,809 · 92%</td><td>2,998.7</td></tr>
+        <tr><td>Long Island Expy</td><td>8,500</td><td>27</td><td class="drop">8,266 · 97%</td><td>2,911.2</td></tr>
+        <tr><td>Brooklyn Queens Expy</td><td>9,004</td><td>19</td><td class="drop">8,741 · 97%</td><td>2,905.6</td></tr>
+        <tr><td>Atlantic Ave</td><td>7,705</td><td>23</td><td class="drop">2,018 · 26%</td><td>2,500.7</td></tr>
+      </table>
+
+    </div>
+  </div>
+
+  <!-- ============ STATE 2: REVEAL FLIPPED ============ -->
+  <div class="state">
+    <div class="statehead">State 2 — “See what other tools show” flipped on</div>
+    <div class="app">
+
+      <div class="titlerow">
+        <div>
+          <div class="apptitle">NYC Collision Intelligence</div>
+          <div class="apptag">Chronic-risk prioritisation · NYC DOT</div>
+        </div>
+        <div class="toggle">Light mode ○</div>
+      </div>
+
+      <div class="claim">
+        <div class="big">On the Belt Parkway, the standard NYC crash view shows <em>0</em> traffic deaths. There have been <em>56</em>.</div>
+        <p>861 of the city’s 1,945 traffic deaths (44.3%) sit in crashes with no recorded borough.
+           Every borough-level view drops them. This one keeps them.</p>
+      </div>
+
+      <div class="reveal">
+        <div class="off">▨ Showing all crashes</div>
+        <div class="on">Showing reported-borough only</div>
+      </div>
+
+      <div class="trust">
+        <span>Complete through 2026-06-11 · NYPD feed last carried 2026-06-11</span>
+        <span class="btn primary">↻ Check the live feed</span>
+        <span class="btn">Why? ▾</span>
+      </div>
+
+      <div class="controls">
+        <div class="grow">Featured corridors: Belt Pkwy ▾</div>
+        <div>Casualty only ☐</div>
+        <div>2019-01-01 → 2026-06-11</div>
+      </div>
+
+      <div class="body">
+        <div class="map">
+          <div class="maplabel">Expected harm · reported borough only — the standard view</div>
+          <div class="cells" id="cellsPartial"></div>
+          <div class="legend"><span>0</span><span class="ramp"></span><span>98th pct+</span></div>
+        </div>
+        <div class="drawer">
+          <div class="dname">Belt Pkwy</div>
+          <div class="dclass">HIGHWAY ▾</div>
+          <div class="kpi"><span>Crashes<span class="q">reported borough only</span></span><b>308</b></div>
+          <div class="kpi"><span>Killed<span class="q">reported borough only</span></span><b>0</b></div>
+          <div class="kpi eb"><span>Expected harm<span class="q">unavailable at this coverage</span></span><b>—</b></div>
+          <div class="badge" style="border-color:var(--sev3);color:var(--sev3)">12,755 of this corridor’s 13,063 crashes are now hidden — and all 56 of its deaths.</div>
+        </div>
+      </div>
+
+      <div class="tablehead">
+        <h3>Ranked corridors — reported borough only</h3>
+        <span>the list every other tool builds</span>
+      </div>
+      <table>
+        <tr><th>Corridor</th><th>Crashes</th><th>Killed</th><th>Truly killed</th><th>Expected</th></tr>
+        <tr><td>Broadway</td><td>7,130</td><td>16</td><td class="drop">22</td><td>—</td></tr>
+        <tr><td>Atlantic Ave</td><td>5,687</td><td>19</td><td class="drop">23</td><td>—</td></tr>
+        <tr><td>Flatbush Ave</td><td>4,243</td><td>16</td><td class="drop">20</td><td>—</td></tr>
+        <tr><td>Linden Boulevard</td><td>4,074</td><td>11</td><td class="drop">14</td><td>—</td></tr>
+        <tr class="dim"><td>Cross Bronx Expy</td><td>751</td><td>0</td><td class="drop">20</td><td>—</td></tr>
+        <tr class="dim"><td>Grand Central Pkwy</td><td>717</td><td>0</td><td class="drop">23</td><td>—</td></tr>
+        <tr class="dim"><td>Van Wyck Expy</td><td>574</td><td>0</td><td class="drop">12</td><td>—</td></tr>
+        <tr class="dim"><td>Major Deegan Expy</td><td>360</td><td>1</td><td class="drop">30</td><td>—</td></tr>
+        <tr class="dim sel"><td>▸ Belt Pkwy</td><td>308</td><td>0</td><td class="drop">56</td><td>—</td></tr>
+        <tr class="dim"><td>FDR Drive</td><td>304</td><td>0</td><td class="drop">22</td><td>—</td></tr>
+        <tr class="dim"><td>Brooklyn Queens Expy</td><td>263</td><td>0</td><td class="drop">19</td><td>—</td></tr>
+        <tr class="dim"><td>Long Island Expy</td><td>234</td><td>0</td><td class="drop">27</td><td>—</td></tr>
+      </table>
+      <p style="font-size:10px;color:var(--faint);margin:6px 0 0">
+        “Truly killed” is shown here for the wireframe only — the real screen would not
+        volunteer it in this state. That is the point of the toggle.</p>
+
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <b>What the reveal actually demonstrates</b>
+  Every figure on this page is computed from <code>data/processed/crashes.parquet</code>,
+  not typed. Belt Pkwy falls from rank 1 to effectively off the list. Every highway does.
+  The surface streets stay put.
+  <ul>
+    <li><b>The standard view shows eight NYC highways with ZERO traffic deaths.</b>
+        Belt Pkwy 0 (actually 56) · Grand Central 0 (23) · FDR Drive 0 (22) ·
+        Cross Bronx 0 (20) · BQE 0 (19) · Long Island Expy 0 (27) · Van Wyck 0 (12) ·
+        Major Deegan 1 (30).
+        That is 209 deaths rendered as 1.</li>
+    <li><b>Across all 12 featured corridors the standard view hides 225 of 288 deaths.</b></li>
+    <li><b>Highways lose 88–98% of their crashes:</b> Belt Pkwy 97.6%, Long Island Expy 97.2%,
+        BQE 97.1%, FDR Dr 95.5%, Major Deegan 94.0%, Grand Central Pkwy 91.6%, Van Wyck 90.8%,
+        Cross Bronx 88.1%. <b>Surface streets barely move:</b> Broadway 28.8%,
+        Atlantic Ave 26.2%, Flatbush Ave 22.7%, Linden Blvd 22.4%.</li>
+    <li>So the standard view does not merely undercount — it <b>systematically erases the
+        highway network</b>, which is exactly where the fatality rate is highest
+        (3.191 vs 1.872 per 1,000, a 1.70× difference).</li>
+    <li>Design note: the completeness channel stays neutral + hatch per DESIGN.md §1.
+        It never borrows a severity hue, so “dropped” can never read as “dangerous”.</li>
+  </ul>
+</div>
+
+<script>
+// Rough cell grid. Two patterns: full coverage, and reported-only (highway
+// corridors go dark). Deterministic so the two panels are comparable.
+const RAMP = ['#2E7D5B','#5C8F4A','#8F9B35','#C9A227','#D97706','#B4232C'];
+function seeded(i){ return (Math.sin(i * 12.9898) * 43758.5453) % 1; }
+function build(el, hideHighways){
+  const n = 18 * 9;
+  let html = '';
+  for (let i = 0; i < n; i++){
+    const r = Math.abs(seeded(i));
+    const col = i % 18, row = Math.floor(i / 18);
+    // "highway" = a few diagonal/horizontal bands through the grid
+    const isHwy = (row === 2) || (row === 6) || (col === 4) || (col + row === 14);
+    let v = isHwy ? 0.55 + r * 0.45 : r * 0.5;
+    let show = true;
+    if (hideHighways && isHwy) show = Math.abs(seeded(i + 99)) < 0.03; // ~97% gone
+    if (!show){ html += '<i style="background:#f0f3f5"></i>'; continue; }
+    const idx = Math.min(RAMP.length - 1, Math.floor(v * RAMP.length));
+    const op = 0.45 + v * 0.55;
+    html += `<i style="background:${RAMP[idx]};opacity:${op.toFixed(2)}"></i>`;
+  }
+  el.innerHTML = html;
+}
+build(document.getElementById('cellsFull'), false);
+build(document.getElementById('cellsPartial'), true);
+</script>
+</body>
+</html>
