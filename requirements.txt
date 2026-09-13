@@ -26,8 +26,11 @@ pandas>=2.2
 # binned, and it is on the tutorial-fingerprint avoid-list.
 pydeck>=0.9
 
-# Drawer charts: contributing factors, victim split, hour-of-week.
-plotly>=5.24
+# No plotly. It was pinned for drawer charts (contributing factors, victim
+# split, hour-of-week) that were never built — zero imports repo-wide. A pin
+# for a dependency nothing imports is ~40 MB of install time on every
+# Community Cloud redeploy for nothing. If those charts get built, pin it
+# again in the same commit that imports it.
 
 # Executive summary export (spec §3.4). XLSX is deferred — see TODOS.md.
 reportlab>=4.2
