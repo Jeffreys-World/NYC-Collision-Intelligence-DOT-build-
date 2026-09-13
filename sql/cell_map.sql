@@ -8,10 +8,20 @@
 -- be both wrong (the model needs its own multi-year window to shrink toward)
 -- and too slow for a Streamlit rerun.
 --
--- eb_matched is always TRUE here because eb_cells only contains cells that
--- were scored; unscored cells (no LION street match) never reach the map,
--- which is the correct behaviour, not a bug — an unmatched cell has no basis
--- for an estimate and must not be drawn as if it did.
+-- The WHERE below is doing real work, and an earlier version of this comment
+-- claimed it was not ("eb_matched is always TRUE here because eb_cells only
+-- contains cells that were scored"). eb_cells carries 95,910 rows and 18,163
+-- of them have eb_matched = FALSE. Dropping the predicate would put 18,163
+-- unscored cells on the map coloured as if they had an estimate, which is the
+-- §4.2 failure this file exists to avoid: an unmatched cell has no basis for
+-- an estimate and must not be drawn as if it did.
+--
+-- eb_cells is registered as a view by app/data.py::_ensure_eb_views, the same
+-- way eb_corridors is. Reading it through the view rather than a relative
+-- read_parquet() path means this file works regardless of the process's
+-- working directory, and an environment that has not run the fit yet gets an
+-- empty result (and the app's "run scripts/fit_eb.py" message) instead of an
+-- IO error.
 SELECT
     lat_c,
     lon_c,
@@ -21,5 +31,5 @@ SELECT
     eb_weight,
     is_highway,
     limited_access_share
-FROM read_parquet('data/raw/eb_cells.parquet')
+FROM eb_cells
 WHERE eb_matched;

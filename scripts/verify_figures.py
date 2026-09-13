@@ -94,8 +94,15 @@ def compute(source: Path) -> dict:
     labeled = f["rows"] - f["crashes_no_borough"]
     deaths_labeled = f["total_deaths"] - f["deaths_in_borough_less_rows"]
 
-    # Deaths per 1,000 crashes. The unlabeled rows are overwhelmingly highway,
-    # which is why their rate is the higher one — the §2.6 finding.
+    # Deaths per 1,000 crashes, comparing borough-missing rows against
+    # borough-present rows. That is the whole comparison — it is NOT a highway
+    # vs surface-street comparison, and an earlier version of this comment
+    # glossed it as one ("the unlabeled rows are overwhelmingly highway").
+    # They are not: 106,209 of the 269,810 borough-missing rows (39%) are on a
+    # limited-access road, carrying 389 of their 861 deaths (45%). Limited
+    # access is the largest single contributor to the gap, not the explanation
+    # for it. The §2.6 finding is that the rate differs by completeness, which
+    # is what these two lines measure.
     f["fatality_rate_unlabeled"] = f["deaths_in_borough_less_rows"] / f["crashes_no_borough"] * 1000
     f["fatality_rate_labeled"] = deaths_labeled / labeled * 1000
     f["fatality_ratio"] = f["fatality_rate_unlabeled"] / f["fatality_rate_labeled"]

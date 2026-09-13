@@ -116,6 +116,21 @@ def _ensure_eb_views(con: duckdb.DuckDBPyConnection) -> None:
             "NULL::BOOLEAN AS eb_matched, NULL::DOUBLE AS coverage WHERE FALSE"
         )
 
+    if EB_CELLS_PARQUET.exists():
+        con.execute(
+            f"CREATE OR REPLACE VIEW eb_cells AS "
+            f"SELECT * FROM read_parquet('{EB_CELLS_PARQUET.as_posix()}')"
+        )
+    else:
+        con.execute(
+            "CREATE OR REPLACE VIEW eb_cells AS "
+            "SELECT NULL::DOUBLE AS lat_c, NULL::DOUBLE AS lon_c, "
+            "NULL::VARCHAR AS canonical, NULL::DOUBLE AS observed, "
+            "NULL::DOUBLE AS eb_estimate, NULL::DOUBLE AS eb_weight, "
+            "NULL::BOOLEAN AS is_highway, NULL::DOUBLE AS limited_access_share, "
+            "NULL::BOOLEAN AS eb_matched WHERE FALSE"
+        )
+
 
 def _ensure_recovery_columns(con: duckdb.DuckDBPyConnection) -> None:
     """Make the schema stable whether or not the borough recovery has run yet.
