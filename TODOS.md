@@ -194,6 +194,34 @@ street alias table works — an explicit committed mapping with tests, not regex
 
 ## Testing
 
+### Re-test the WebGL blocker on CI before treating it as settled
+
+**What:** `DELIVERABLES.md` records that headless browsers here have no GPU and
+cannot create a WebGL context, so the pydeck map cannot be screenshotted or
+asserted against. On 2026-09-13 a /design-review run drove gstack's headless
+Chromium against the app on this machine and **the map rendered** — 77,747 live
+cells in every screenshot in
+`~/.gstack/projects/Jeffreys-World-GitHub/designs/design-audit-20260912/screenshots/`.
+The console carried `GL Driver Message (OpenGL): GPU stall due to ReadPixels`,
+which is a performance warning from a working GL context, not a failure to
+create one.
+
+**Why:** that claim is load-bearing. It drove decision 6A at the engineering
+review and it is the stated blocker on the browser E2E item below. If it is
+wrong, the E2E suite is cheaper than recorded and the map becomes assertable.
+
+**Context:** this does not automatically transfer to GitHub Actions, which is a
+different machine with different drivers — that is the actual question to
+settle. Run one throwaway workflow that loads the app and screenshots the map
+canvas. If it renders, correct `DELIVERABLES.md` and reopen the E2E item's
+scope. If it does not, record which environment the limitation applies to,
+because "this repo's sandbox" is now known to be too broad. Nothing has been
+edited on the strength of one machine's result.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
 ### Browser end-to-end tests for the map and the reveal
 
 **What:** Real-browser tests that drive the deployed app: click a ranked-table row and assert
@@ -222,6 +250,39 @@ which is shaped for `/qa` to consume directly.
 **Effort:** M
 **Priority:** P2
 **Depends on:** deploy, and PR1's pure-logic extraction landing first
+
+## Design
+
+### Deferred design findings from the 2026-09-13 /design-review
+
+**What:** Four findings from the design audit that were deliberately not fixed in
+that run, because each one is already a task in the committed engineering plan
+and fixing it early would reorder `app/streamlit_app.py` ahead of PR1's spine.
+
+**Why:** the audit graded the app C+ overall but **D on visual hierarchy and D on
+interaction states**, and every point of that came from these four. The five
+findings that were fixed were craft; these four are the structure.
+
+**Context:** full report with screenshots at
+`~/.gstack/projects/Jeffreys-World-GitHub/designs/design-audit-20260912/design-audit-localhost-8501.md`.
+
+- **FINDING-001 (high)** — the app's central claim renders at 13px, weight 400,
+  `#8B98A5`, at y=1422 in a 900px viewport, and only after a corridor is
+  selected: `▨ Includes 12,755 crashes other tools drop (98%)`. The `<h1>` above
+  it is 44px/700. → **T11**
+- **FINDING-002 (high)** — selecting a corridor does not change the map by a
+  single pixel. Root cause is known: the constant cache key at
+  `streamlit_app.py:255`. → **Next Step 3 / T4**
+- **FINDING-003 (high)** — three empty states on first paint (drawer, estimator,
+  export), plus ~500px of dead black beside the map. → **T12**
+- **FINDING-009 (high)** — the onboarding expander states that the casualty
+  toggle "restricts every figure on the page". It filters the drawer only. Read
+  live from the rendered page, not inferred. → **T3** fixes the behaviour, **T10**
+  deletes the expander.
+
+**Effort:** covered by existing tasks
+**Priority:** P1
+**Depends on:** PR1 landing first
 
 ## Dependencies
 
