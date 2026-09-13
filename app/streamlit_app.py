@@ -279,7 +279,7 @@ with c3:
     )
 
 date_from, date_to = normalize_date_range(picked_range, coverage_lo, coverage_hi)
-build_view(con, date_from, date_to)
+build_view(con, date_from, date_to, casualty_only)
 
 picked_canonical = (None if picked_label.startswith("(none")
                     else presentation.canonical_for_label(featured, picked_label))
@@ -387,9 +387,11 @@ with drawer_col:
             unsafe_allow_html=True,
         )
     else:
+        # No pandas filter here any more. The casualty toggle is applied in
+        # sql/base_view.sql, so these rows and the ranked table's rows come
+        # from the same filtered view and cannot disagree. See T3 in
+        # docs/designs/ui-reveal-cold-open.md.
         detail_rows = query(con, "selection_rows", cache_key)
-        if casualty_only:
-            detail_rows = detail_rows[detail_rows["is_fatal"] | detail_rows["is_injury"]]
 
         rc = road_class.classify(selected.canonical)
         st.markdown(f"## {selected.display}")

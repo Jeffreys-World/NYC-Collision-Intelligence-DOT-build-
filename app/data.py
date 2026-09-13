@@ -221,17 +221,31 @@ def freshness_line(coverage_to: date) -> str:
             f"NYPD feed last carried {UPSTREAM_THROUGH}, pulled {PULLED_ON}")
 
 
-def build_view(con: duckdb.DuckDBPyConnection, date_from: date, date_to: date) -> None:
-    """(Re)create `crashes_filtered` for the user's date range.
+def build_view(con: duckdb.DuckDBPyConnection, date_from: date, date_to: date,
+               casualty_only: bool = False) -> None:
+    """(Re)create `crashes_filtered` for the user's filters.
 
-    The dates go through a one-row `filter_params` table rather than into the
-    view's SQL text. DuckDB refuses to prepare a CREATE VIEW statement, and
+    Every filter goes through a one-row `filter_params` table rather than into
+    the view's SQL text. DuckDB refuses to prepare a CREATE VIEW statement, and
     string-formatting user input into SQL is the injection seam we are avoiding.
-    INSERT *can* be prepared, so the values stay bound.
+    INSERT *can* be prepared, so the values stay bound — including the boolean,
+    which looks harmless enough to interpolate and is not worth the exception.
+
+    `casualty_only` defaults to False, matching spec §1.3: every crash counts
+    unless the user asks otherwise.
+
+    DROP the view before recreating it. CREATE OR REPLACE VIEW alone is not
+    enough here: the table is recreated below it, and a view holding a stale
+    column list over a redefined params table is the kind of failure that only
+    shows up after a schema change.
     """
-    con.execute("CREATE TABLE IF NOT EXISTS filter_params (date_from DATE, date_to DATE)")
-    con.execute("DELETE FROM filter_params")
-    con.execute("INSERT INTO filter_params VALUES (?, ?)", [date_from, date_to])
+    con.execute("DROP TABLE IF EXISTS filter_params CASCADE")
+    con.execute(
+        "CREATE TABLE filter_params "
+        "(date_from DATE, date_to DATE, casualty_only BOOLEAN)"
+    )
+    con.execute("INSERT INTO filter_params VALUES (?, ?, ?)",
+                [date_from, date_to, bool(casualty_only)])
     con.execute(read_sql("base_view"))
 
 
