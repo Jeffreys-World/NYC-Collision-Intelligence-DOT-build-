@@ -279,18 +279,88 @@ def is_eb_matched(row: pd.Series | None) -> bool:
     return row is not None and bool(row["eb_matched"])
 
 
+# ------------------------------------------------------- selection arbitration
+#
+# The dropdown and the ranked table can each set the corridor, and Streamlit
+# re-runs the whole script on any widget change, so both re-emit their value on
+# every run. Without a rule they fight: the page renders one corridor's map
+# beside another's drawer, and which one wins depends on render order rather
+# than on anything the user did.
+#
+# The rule is LAST TOUCHED WINS, implemented with widget callbacks rather than
+# by comparing values across runs. A callback fires only for the widget the
+# user actually changed, before the rerun, which is what "last touched" means.
+#
+# And only the CANONICAL is ever stored. Never the row index — see
+# canonical_at_row.
+
+CITY_WIDE_LABEL = "(none — city-wide)"
+
+
+def selected_row_indices(widget_state) -> list[int]:
+    """Row indices out of st.dataframe's selection state, defensively.
+
+    The shape is {"selection": {"rows": [...], "columns": [...]}}. Parsed with
+    .get() at every level because a widget that has never been interacted with
+    returns None, and a Streamlit version bump that adds a level would
+    otherwise raise inside a callback — where an exception is invisible.
+    """
+    if not isinstance(widget_state, dict):
+        return []
+    selection = widget_state.get("selection")
+    if not isinstance(selection, dict):
+        return []
+    rows = selection.get("rows")
+    return [int(r) for r in rows] if isinstance(rows, list) else []
+
+
+def canonical_at_row(displayed: list[str], row: int) -> str | None:
+    """The canonical at a displayed row position, bounds-checked.
+
+    THE TRAP THIS EXISTS FOR: st.dataframe returns a POSITIONAL index into the
+    frame as rendered. The ranked table re-sorts whenever the casualty toggle
+    or the date range changes, so a stored index quietly points at a different
+    corridor after any re-sort — the page keeps showing a selection, it is
+    just the wrong one, and nothing anywhere raises.
+
+    So the index is resolved to a canonical HERE, at the moment of the click,
+    against the frame that was actually on screen, and the canonical is what
+    gets stored. The index is never persisted and never re-read.
+
+    Out of range returns None rather than raising: this runs inside a widget
+    callback, where an exception has nowhere to surface.
+    """
+    if 0 <= row < len(displayed):
+        return displayed[row]
+    return None
+
+
 # ---------------------------------------------------------------- cache keys
 
 def query_cache_key(source_label: str, date_from: date, date_to: date,
                     casualty_only: bool, canonical: str | None) -> tuple:
-    """The key for anything reading `crashes_filtered`.
+    """The key for a query that depends on WHICH corridor is selected.
 
-    Every value that can change the result, and nothing that cannot. Dates are
-    stringified because a `date` is hashable but its repr is what makes a cache
-    miss debuggable in a log.
+    Only `selection_rows` does. Dates are stringified because a `date` is
+    hashable but its repr is what makes a cache miss debuggable in a log.
     """
     return (source_label, str(date_from), str(date_to),
             bool(casualty_only), canonical)
+
+
+def table_cache_key(source_label: str, date_from: date, date_to: date,
+                    casualty_only: bool) -> tuple:
+    """The key for a query that reads `crashes_filtered` city-wide.
+
+    The canonical is absent because `corridor_table` does not read
+    `selection_params` — it aggregates every corridor regardless of what is
+    selected. Including the canonical anyway (which is what the single shared
+    key used to do) multiplied the cache entries for an identical result by
+    the 8,931 corridors that can be selected, in a ~1 GB container. That is
+    the same unbounded-growth failure decision 2 set max_entries for, arriving
+    through the key instead of through the ceiling.
+    """
+    return (source_label, str(date_from), str(date_to), bool(casualty_only))
 
 
 def map_cache_key(source_label: str) -> tuple:

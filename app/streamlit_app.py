@@ -256,13 +256,70 @@ with check_col:
 st.markdown('<div style="border-top:1px solid var(--line);margin:0.5rem 0"></div>',
             unsafe_allow_html=True)
 
-corridor_options = ["(none — city-wide)"] + list(featured["corridor"])
+# --- selection arbitration (decision 8) ------------------------------------
+#
+# Two widgets can set the corridor and both re-emit on every rerun. LAST
+# TOUCHED WINS, and the rule is implemented with callbacks rather than by
+# diffing values across runs: a callback fires only for the widget the user
+# actually changed, which is exactly what "last touched" means.
+#
+# ONE value is stored — SELECTED_KEY, always a canonical, never a row index.
+# See presentation.canonical_at_row for why the index is the trap.
+
+SELECTED_KEY = "selected_canonical"
+DROPDOWN_KEY = "corridor_select"
+RANKED_TABLE_KEY = "ranked_table"
+DISPLAYED_KEY = "ranked_table_canonicals"
+CITY_WIDE = presentation.CITY_WIDE_LABEL
+
+# DISPLAYED_KEY holds the canonicals in the order the ranked table last
+# rendered them, written when the table renders and read by its callback.
+# Deliberately session_state and not a module global: Streamlit callbacks fire
+# at the start of the rerun, before the script body re-executes, so a module
+# global would happen to hold the right value through the callback's closure
+# over the previous run's namespace. "Happens to" is not a contract worth
+# betting a wrong selection on. session_state persistence is documented.
+
+
+def _on_dropdown_change() -> None:
+    label = st.session_state.get(DROPDOWN_KEY)
+    canonical = (None if not label or label.startswith("(none")
+                 else presentation.canonical_for_label(featured, label))
+    st.session_state[SELECTED_KEY] = canonical
+    # Clear the table's highlight. Leaving it lit next to a dropdown showing
+    # something else is the visible half of the fight this rule settles.
+    st.session_state.pop(RANKED_TABLE_KEY, None)
+
+
+def _on_table_select() -> None:
+    rows = presentation.selected_row_indices(st.session_state.get(RANKED_TABLE_KEY))
+    if not rows:
+        # Deselecting a row is a real action: go back to city-wide rather
+        # than silently keeping the last corridor.
+        st.session_state[SELECTED_KEY] = None
+        st.session_state[DROPDOWN_KEY] = CITY_WIDE
+        return
+    canonical = presentation.canonical_at_row(
+        st.session_state.get(DISPLAYED_KEY, []), rows[0])
+    if canonical is None:
+        return
+    st.session_state[SELECTED_KEY] = canonical
+    # The dropdown can only name 12 of 8,931 corridors, so it cannot follow
+    # the table anywhere. Reset it to city-wide rather than leave it pointing
+    # at a corridor that is no longer the selected one.
+    st.session_state[DROPDOWN_KEY] = CITY_WIDE
+
+
+corridor_options = [CITY_WIDE] + list(featured["corridor"])
 c1, c2, c3 = st.columns([2, 1, 2])
 with c1:
-    picked_label = st.selectbox(
+    st.selectbox(
         "Featured corridors", corridor_options,
+        key=DROPDOWN_KEY, on_change=_on_dropdown_change,
         help="The keyboard and screen-reader equivalent of clicking the map "
-             "(DESIGN.md §5). Selecting one opens the drawer.",
+             "(DESIGN.md §5). Selecting one opens the drawer. The ranked "
+             "table below can select any of the 8,931 corridors, including "
+             "the ones this list cannot name.",
     )
 with c2:
     casualty_only = st.toggle(
@@ -282,19 +339,23 @@ with c3:
 date_from, date_to = normalize_date_range(picked_range, coverage_lo, coverage_hi)
 build_view(con, date_from, date_to, casualty_only)
 
-picked_canonical = (None if picked_label.startswith("(none")
-                    else presentation.canonical_for_label(featured, picked_label))
-
-# ONE resolved value from here down. `selected` is None (city-wide) or a
-# Corridor carrying a display label that is never None and never the string
-# "None" — see presentation.resolve_corridor.
-selected = presentation.resolve_corridor(featured, picked_canonical)
+# ONE resolved value from here down, read from the single stored canonical.
+# `selected` is None (city-wide) or a Corridor carrying a display label that
+# is never None and never the string "None" — see resolve_corridor.
+selected = presentation.resolve_corridor(featured, st.session_state.get(SELECTED_KEY))
 selected_canonical = selected.canonical if selected else None
 selected_corridor = selected.display if selected else None
 set_selection(con, selected_canonical)
 
+# Two keys, not one. `cache_key` carries the canonical and belongs to
+# selection_rows, the only query that reads selection_params. `table_key`
+# omits it, because corridor_table aggregates every corridor regardless of
+# what is selected — keying that on the canonical multiplied identical
+# results by 8,931.
 cache_key = presentation.query_cache_key(
     source.label, date_from, date_to, casualty_only, selected_canonical)
+table_key = presentation.table_cache_key(
+    source.label, date_from, date_to, casualty_only)
 
 
 # ---------------------------------------------------------------------------
@@ -448,7 +509,7 @@ with drawer_col:
             theme.kpi_row("Killed", presentation.format_count(n_killed), "observed")
 
             eb_row = presentation.eb_row_for(
-                query(con, "corridor_table", cache_key), selected.canonical)
+                query(con, "corridor_table", table_key), selected.canonical)
             if presentation.is_eb_matched(eb_row):
                 theme.kpi_row(
                     "Expected harm",
@@ -485,13 +546,19 @@ st.markdown("## Ranked corridors")
 st.caption(
     "Text equivalent of the map, carrying the same figures. Ranked by "
     "cell-level Empirical Bayes expected harm where matched, then by "
-    "observed crashes."
+    "observed crashes. Click a row to open that corridor — this table "
+    "reaches all 8,931 corridors, not just the 12 the dropdown names."
 )
-table = query(con, "corridor_table", cache_key)
+table = query(con, "corridor_table", table_key)
 if table.empty:
     st.info("No corridors in this date range.")
 else:
     show = table.copy()
+    # Captured BEFORE the ⚠ suffix is appended below, in the order the rows
+    # are about to be rendered. _on_table_select resolves the clicked
+    # position against this list, so the stored value is a canonical rather
+    # than an index that a later re-sort would re-point.
+    st.session_state[DISPLAYED_KEY] = list(show["corridor"])
     show["expected harm"] = show["eb_estimate"].where(show["eb_matched"]).round(1)
     low_coverage = presentation.low_coverage_mask(show)
     # The warning rides on the corridor name, not on the figure. Appending it
@@ -509,6 +576,9 @@ else:
         show[["corridor", "crashes", "casualty crashes", "injured", "killed",
               "records other tools drop", "expected harm"]],
         use_container_width=True, hide_index=True, height=320,
+        key=RANKED_TABLE_KEY,
+        selection_mode="single-row",
+        on_select=_on_table_select,
         column_config={
             # Without an explicit format the column drops trailing zeros, so
             # 5186.0 renders "5186" beside 3100.2 and the decimal points stop
@@ -555,7 +625,7 @@ else:
     )
 
     eb_row = presentation.eb_row_for(
-        query(con, "corridor_table", cache_key), selected.canonical)
+        query(con, "corridor_table", table_key), selected.canonical)
 
     if not presentation.is_eb_matched(eb_row):
         st.info("Observed only — no Empirical Bayes match for this corridor. "
