@@ -306,6 +306,29 @@ so, pin it in the same commit as the chart, never ahead of it.
 **Priority:** P4
 **Depends on:** PR1
 
+### Carry the feed check into the PDF's assumptions block
+
+**What:** `app/feed.py::export_note` builds one line for the §3.4 assumptions block — "on
+`<server date>`, data.cityofnewyork.us reported no crash records dated after `<coverage>`" —
+and nothing calls it. T6 wired the module's UI surface (`render_feed_check`) but not this.
+`build_summary_pdf` needs one more keyword argument and one more row.
+
+**Why:** it is the strongest line available in the export and it costs almost nothing. A PDF
+that leaves the building carrying the server's own dated statement is the difference between
+"trust our extract" and "here is the feed agreeing with it, on this date". `export_note`
+already returns None on a failed or undated check, so the failure modes are handled — it is
+the one route from that module into an export and it is currently a dead end.
+
+**Why it was not done in T6:** T6's scope was replacing `app/live.py` at the call site. This
+changes `build_summary_pdf`'s signature and `tests/test_pdf_export.py` with it, which is a
+separate commit and a separate reviewer question. Leaving `export_note` unwired does repeat
+the shape of the problem decision 9 fixed (a documented function nothing calls), which is why
+this is written down rather than left to be rediscovered.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** nothing — PR1's T6 already landed the module
+
 ## Export
 
 ### XLSX export

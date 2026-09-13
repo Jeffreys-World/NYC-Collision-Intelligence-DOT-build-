@@ -570,4 +570,44 @@ has not been corrected — it is outside this document's scope.
 
 **VERDICT: APPROVED — proceed to implementation with PR1.**
 
+## Implementation log — PR1 complete, 2026-09-13
+
+T1 through T9 landed on `main`, one commit each, suite green after every one. 241 tests at
+the start of the day, 374 now.
+
+| Task | Commit | What it actually turned out to be |
+|---|---|---|
+| T7 | `511e52c` | As described. Zero references repo-wide, confirmed before removal. |
+| T8 | `91caafa` | Three comments corrected, all three confidently wrong. `eb_cells` registered as a view, so `cell_map.sql` no longer depends on the process working directory. |
+| T6 | `9611343` | Found a **NameError** in `app/feed.py:733` — an `edge` variable interpolated but never assigned. The first feed result ever rendered would have replaced the panel with a traceback. Nothing imported the module, so nothing had ever reached that line. Critical gap #2 closed: the copy test moved to `tests/test_feed_copy.py` and was **widened** to cover `streamlit_app.py`'s own copy, which was never checked before. |
+| T1 | `935a517` | As described, plus the render-order diagram. |
+| T2 | `7ba8098` | As described. The "City-wide" export bug is real and becomes the common path the moment T5 lands. |
+| T3 | `7c3f667` | Predicate went into `base_view.sql`, **not** `corridor_table.sql` as the task text said. That file already declares itself the one place filter predicates live, and every query reads from it, so the table and drawer agree by construction rather than by two edits kept in step. |
+| T4 | `cadd396` | Critical gap #1 closed. Decision 1's layer *seam* is in place; the completeness layer itself is **not built**, because `eb_cells` has no completeness column and the SQL for one is deferred with the reveal. Filling the slot with an invented figure would break non-negotiable #1 to satisfy a diagram. |
+| T5 | `96fdb13` | As described, plus a measured correction to the plan — see below. |
+| T9 | (with each task) | All three named regressions, plus unit coverage over everything T1 extracted. |
+
+**One measured correction to the plan.** The failure-mode table says a re-sort "silently
+reselects a different corridor", which is true but not uniform, and the difference matters.
+`corridor_table` orders by `coalesce(eb_estimate, 0) DESC, crashes DESC`, and `eb_estimate` is
+fixed over the model's own window — so the matched corridors at the top never move. Narrowing
+the range to 2022-2024 left the first 2,185 positions identical, then moved 3,832 of 6,507,
+first diverging at position 2,186 (`ERASMUS ST` → `30 DR`). The trap is invisible for the
+handful of corridors anyone demos and near-certain for the thousands the ranked table exists
+to make reachable. It would not have shown up in a demo.
+
+**Verified in a real browser, not only in tests.** Clicked row 0: drawer opened "Belt Pkwy"
+and the dropdown reset itself to "(none — city-wide)". Clicked row 7, a non-featured corridor:
+drawer headed itself "3 AVE" where it would previously have rendered "None". Flipped the
+casualty toggle with that selection live: the table dropped from 8,931 rows to 5,798 and the
+selection held. Zero console errors. `scripts/verify_figures.py`: all 15 published figures
+reproduce.
+
+**One thing deliberately left undone.** `feed.export_note` is still wired to nothing —
+recorded in `TODOS.md` rather than done here, because it changes `build_summary_pdf`'s
+signature. It repeats the shape of the problem decision 9 fixed, which is why it is written
+down instead of left to be rediscovered.
+
+**Not started: PR2 (T10-T13).** Strictly serial and strictly after PR1.
+
 NO UNRESOLVED DECISIONS
