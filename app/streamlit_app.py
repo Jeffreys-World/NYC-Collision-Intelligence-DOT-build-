@@ -364,7 +364,7 @@ with drawer_col:
 
         rc = road_class.classify(selected_canonical)
         override_key = f"road_class_override::{selected_canonical}"
-        st.markdown(f"### {selected_corridor}")
+        st.markdown(f"## {selected_corridor}")
         forced = st.selectbox(
             "Road class", ["highway", "bridge", "tunnel", "surface"],
             index=["highway", "bridge", "tunnel", "surface"].index(rc.road_class),
@@ -427,7 +427,7 @@ with drawer_col:
 # Ranked corridor table — the accessibility equivalent of the map (§5)
 # ---------------------------------------------------------------------------
 
-st.markdown("### Ranked corridors")
+st.markdown("## Ranked corridors")
 st.caption(
     "Text equivalent of the map, carrying the same figures. Ranked by "
     "cell-level Empirical Bayes expected harm where matched, then by "
@@ -475,7 +475,7 @@ else:
 
 st.markdown('<div style="border-top:1px solid var(--line);margin:1.5rem 0 0.5rem"></div>',
             unsafe_allow_html=True)
-st.markdown("### Countermeasure & budget estimator")
+st.markdown("## Countermeasure & budget estimator")
 
 export_blocked_reasons: list[str] = []
 selected_capex_rows: list[dict] = []
@@ -582,7 +582,7 @@ else:
         if selected_capex_rows:
             total_capex = sum(r["capex"] for r in selected_capex_rows)
             total_avoided = sum(r["expected_harm_avoided"] for r in selected_capex_rows)
-            st.markdown("#### Selected package")
+            st.markdown("### Selected package")
             theme.kpi_row("Total CAPEX", f"${total_capex:,.0f}")
             theme.kpi_row("Total expected harm avoided", f"{total_avoided:.1f}")
 
@@ -602,7 +602,7 @@ else:
 # Export (§3.4)
 # ---------------------------------------------------------------------------
 
-st.markdown("### Executive summary export")
+st.markdown("## Executive summary export")
 if not source.trustworthy:
     export_blocked_reasons.append("data source is not trustworthy")
 
