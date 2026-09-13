@@ -69,6 +69,7 @@ from app.data import (
     date_bounds,
     freshness_line,
     get_connection,
+    map_cells,
     normalize_date_range,
     query,
     resolve_source,
@@ -303,7 +304,11 @@ cache_key = presentation.query_cache_key(
 map_col, drawer_col = st.columns([2, 1], gap="medium")
 
 with map_col:
-    cells = presentation.with_severity_colors(query(con, "cell_map", ("cell_map",)))
+    # Keyed on the source, NOT on the date range or the casualty toggle, and
+    # never on a constant. presentation.map_cache_key documents which is which
+    # and why. The colouring happens inside map_cells, so the 77,747-row ramp
+    # runs once per key rather than on every rerun.
+    cells = map_cells(con, presentation.map_cache_key(source.label))
     if casualty_only:
         # Cell layer colours by EB expected harm, which is casualty-based by
         # construction (scripts/fit_eb.py fits on casualty counts) — the
@@ -322,6 +327,22 @@ with map_col:
                  "patterns. On: also extrudes each cell by its expected harm.",
         )
 
+        # THE LAYER SEAM (decision 1). Layers are named and assembled in one
+        # list, bottom to top, rather than being appended inline among the
+        # deck configuration. Decision 1 calls for a second data layer beside
+        # the EB one — a completeness layer, showing per cell how much of that
+        # cell's harm every borough-level view drops. It is NOT built here,
+        # and not because it was forgotten: eb_cells carries no completeness
+        # column, so that layer needs the new SQL the plan explicitly defers
+        # with the reveal. Inventing a completeness figure to fill the slot
+        # would break non-negotiable #1 to satisfy a diagram.
+        #
+        # What this seam buys is that adding it later is one entry in this
+        # list, not a restructure of the deck call.
+        #
+        #     boundaries   geographic context, no fill
+        #     eb_cells     expected harm, severity colour channel
+        #     (deferred)   completeness, hatch/texture channel
         layers = []
         if BOROUGH_BOUNDARIES.exists():
             # Thin outline only, no fill — geographic context (which borough

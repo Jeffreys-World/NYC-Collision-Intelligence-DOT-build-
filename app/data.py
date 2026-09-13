@@ -263,16 +263,65 @@ def set_selection(con: duckdb.DuckDBPyConnection, corridor: str | None) -> None:
     con.execute("INSERT INTO selection_params VALUES (?)", [corridor or "\x00none\x00"])
 
 
-@st.cache_data(show_spinner=False)
+# CACHE KEY GRAPH. Which function is keyed on what, and why one of them is
+# keyed differently on purpose.
+#
+#   build_view(dates, casualty_only)
+#        │  rewrites crashes_filtered in place — NOT cached, it is a write
+#        ▼
+#   crashes_filtered ──► query(_con, name, cache_key)
+#                            key: query_cache_key(source, from, to,
+#                                                 casualty_only, canonical)
+#                            every value that changes the result, and nothing
+#                            that does not. max_entries bounds it.
+#
+#   eb_cells ─────────► map_cells(_con, cache_key)
+#                            key: map_cache_key(source)
+#                            NOT the query key. eb_cells is the fit's own
+#                            output over its own multi-year window; it does
+#                            not move with the date picker.
+#
+# The bug this graph replaces: the map was fetched through `query` with a
+# hardcoded ("cell_map",) — a CONSTANT. Every map state resolved to the same
+# entry, so any new state would have served a stale frame forever, and no unit
+# test can catch a stale frame. See presentation.map_cache_key.
+
+# ~1 GB on Community Cloud, and the drawer key includes the canonical: 8,931
+# corridors × filter combinations is unbounded growth in a container that
+# cannot afford it. 64 is roughly a working session's worth of back-and-forth
+# and is cheap to raise. Unset (the previous state) means no ceiling at all.
+MAX_QUERY_CACHE_ENTRIES = 64
+
+# One per source label in practice. The map frame is the largest object the
+# app caches (77,747 rows with a colour list per row), so this stays small.
+MAX_MAP_CACHE_ENTRIES = 4
+
+
+@st.cache_data(show_spinner=False, max_entries=MAX_QUERY_CACHE_ENTRIES)
 def query(_con: duckdb.DuckDBPyConnection, name: str, cache_key: tuple):
     """Run a named query against the shared view.
 
     `_con` is underscore-prefixed so Streamlit does not try to hash the
     connection. `cache_key` carries the values that actually change the result
     (source + date range + filters), so the cache invalidates when they do.
-
-    The map layer is cached the same way, on (corridor, filters, zoom) — see
-    DESIGN.md §3. Streamlit reruns the whole script on every widget change, so
-    without that key, dragging a cost slider re-serialises the entire map.
+    Build it with `presentation.query_cache_key`, never by hand.
     """
     return _con.execute(read_sql(name)).df()
+
+
+@st.cache_data(show_spinner=False, max_entries=MAX_MAP_CACHE_ENTRIES)
+def map_cells(_con: duckdb.DuckDBPyConnection, cache_key: tuple):
+    """The map's cells, coloured, computed once per key.
+
+    The colouring used to happen in the page script: `_color()` was a pure
+    Python function mapped over 77,747 rows on EVERY rerun, outside any cache.
+    Streamlit reruns the whole script on any widget change, so dragging a cost
+    slider in the estimator re-ran the severity ramp over every cell in the
+    city before rendering a number that had nothing to do with the map.
+
+    Key with `presentation.map_cache_key`. Anything that changes what the map
+    DRAWS belongs in that tuple, in the same commit that adds it.
+    """
+    from app import presentation
+
+    return presentation.with_severity_colors(_con.execute(read_sql("cell_map")).df())
