@@ -445,10 +445,12 @@ else:
     # alongside the handful of real bridge/tunnel cases this is meant to catch.
     low_coverage = (show["eb_matched"] & show["eb_coverage"].notna()
                     & (show["eb_coverage"] < LOW_COVERAGE_THRESHOLD))
-    show["expected harm"] = show["expected harm"].astype("string")
-    show.loc[low_coverage, "expected harm"] = (
-        show.loc[low_coverage, "expected harm"] + " ⚠ low coverage"
-    )
+    # The warning rides on the corridor name, not on the figure. Appending it
+    # to "expected harm" forced that column to dtype string, which left-aligns
+    # it while every other figure in the table right-aligns — the one column a
+    # reader most wants to compare down was the one they could not. The caption
+    # below already reads "corridor(s) above", so the name is where it belongs.
+    show.loc[low_coverage, "corridor"] = show.loc[low_coverage, "corridor"] + " ⚠"
     show = show.rename(columns={
         "corridor": "corridor", "crashes": "crashes",
         "casualty_crashes": "casualty crashes", "injured": "injured",
@@ -458,6 +460,12 @@ else:
         show[["corridor", "crashes", "casualty crashes", "injured", "killed",
               "records other tools drop", "expected harm"]],
         use_container_width=True, hide_index=True, height=320,
+        column_config={
+            # Without an explicit format the column drops trailing zeros, so
+            # 5186.0 renders "5186" beside 3100.2 and the decimal points stop
+            # lining up down the one column meant to be compared.
+            "expected harm": st.column_config.NumberColumn(format="%.1f"),
+        },
     )
     if low_coverage.any():
         st.caption(
