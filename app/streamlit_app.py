@@ -339,7 +339,7 @@ with map_col:
             '<div style="height:10px;border-radius:4px;background:'
             "linear-gradient(90deg,#2E7D5B,#C9A227,#D97706,#B4232C)\"></div>"
             f'<div style="display:flex;justify-content:space-between;flex-wrap:wrap;'
-            f'gap:0.25rem 0.75rem;font-size:0.7rem">'
+            f'gap:0.25rem 0.75rem;font-size:0.75rem">'
             f"<span>0</span><span>median {p50:.1f}</span>"
             f"<span>90th pct {p90:.1f}</span><span>98th pct+ {p98:.1f}</span></div>"
             "</div>"
