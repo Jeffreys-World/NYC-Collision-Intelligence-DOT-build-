@@ -3,13 +3,54 @@
 Layout is DESIGN.md §3: freshness line, sticky control bar, map (≥65% width)
 beside the drawer as a real `st.columns` column. See CLAUDE_CODE_PROMPT.md §7
 for the demo sequence this screen has to support end to end.
+
+RENDER ORDER, and what gates what. Streamlit runs this file top to bottom on
+every widget change, so the order below is the control flow — there is no
+router and no component tree to read it off.
+
+    sidebar filters (date range, casualty toggle)
+            │
+            ▼
+    build_view(con, date_from, date_to, casualty_only)
+            │   ONE place the filter predicates live. Everything downstream
+            │   reads `crashes_filtered`, so the table and the drawer cannot
+            ▼   disagree about what is filtered.
+    ┌───────────────────────── cache_key ─────────────────────────┐
+    │  query_cache_key(source, dates, casualty_only, canonical)   │
+    └───────┬─────────────────────┬───────────────────┬───────────┘
+            │                     │                   │
+            ▼                     ▼                   ▼
+    ┌───────────────┐   ┌──────────────────┐   ┌──────────────┐
+    │ map_cells()   │   │ selection_rows   │   │ corridor_    │
+    │ map_cache_key │   │ (drawer)         │   │ table (rank) │
+    │ NOT this key  │   └──────────────────┘   └──────────────┘
+    └───────────────┘            │                   │
+      eb_cells does not          └─────────┬─────────┘
+      move with the date                   │
+      picker — see                         ▼
+      presentation.map_cache_key   ┌─────────────────┐
+                                   │ estimator (§3)  │  gated on eb_matched
+                                   └────────┬────────┘
+                                            ▼
+                                   ┌─────────────────┐
+                                   │ export gate     │  blocked if ANY
+                                   └─────────────────┘  section degraded
+
+SELECTION ARBITRATION is the one place two widgets converge. The dropdown and
+the ranked table can each set the corridor, they both re-emit on every rerun,
+and without a rule they fight — one corridor's map beside another's drawer.
+`resolve_selection()` is that rule: last touched wins, and only `canonical` is
+stored, never a row index. See its docstring for why the index is the trap.
+
+Pure logic lives in app/presentation.py, which imports no streamlit and is
+unit-tested. Anything here that has a right answer independent of the session
+belongs there, not in this file.
 """
 
 from __future__ import annotations
 
 import csv
 import json
-import math
 import sys
 from pathlib import Path
 
@@ -22,7 +63,7 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
-from app import estimator, feed, road_class, theme
+from app import estimator, feed, presentation, road_class, theme
 from app.data import (
     build_view,
     date_bounds,
@@ -38,14 +79,10 @@ ROOT = Path(__file__).resolve().parent.parent
 FEATURED_CSV = ROOT / "data" / "featured_corridors.csv"
 BOROUGH_BOUNDARIES = ROOT / "data" / "raw" / "boroughs_water-included.geojson"
 
-# scripts/fit_eb.py prints a warning list of corridors whose EB estimate sits
-# over a badly incomplete coordinate footprint (bridges and tunnels above
-# all — NYPD does not geocode crashes on a span, see the bridge-shaped-hole
-# finding in NEXT-SESSION.md). 0.5 is the same cut point that list uses: below
-# it, a corridor's `eb_estimate` is a real number over less than half its
-# actual harm, and presenting it without saying so is exactly the §4.2
-# failure the coverage columns exist to prevent.
-LOW_COVERAGE_THRESHOLD = 0.5
+# Lives in app/presentation.py now, alongside the rule that reads it. Re-
+# exported under the old name because the threshold appears in user-facing
+# copy below and the two must not be able to drift apart.
+LOW_COVERAGE_THRESHOLD = presentation.LOW_COVERAGE_THRESHOLD
 
 st.set_page_config(page_title="NYC Collision Intelligence — DOT", layout="wide")
 
@@ -251,7 +288,8 @@ if selected_corridor is not None:
     selected_canonical = match.iloc[0] if len(match) else None
 set_selection(con, selected_canonical)
 
-cache_key = (source.label, str(date_from), str(date_to), casualty_only, selected_canonical)
+cache_key = presentation.query_cache_key(
+    source.label, date_from, date_to, casualty_only, selected_canonical)
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +299,7 @@ cache_key = (source.label, str(date_from), str(date_to), casualty_only, selected
 map_col, drawer_col = st.columns([2, 1], gap="medium")
 
 with map_col:
-    cells = query(con, "cell_map", ("cell_map",))
+    cells = presentation.with_severity_colors(query(con, "cell_map", ("cell_map",)))
     if casualty_only:
         # Cell layer colours by EB expected harm, which is casualty-based by
         # construction (scripts/fit_eb.py fits on casualty counts) — the
@@ -279,29 +317,6 @@ with map_col:
             help="Off (default): a flat heat map — easiest to read city-wide "
                  "patterns. On: also extrudes each cell by its expected harm.",
         )
-
-        # eb_estimate is heavily right-skewed (median ~1.2, 98th pct ~18) —
-        # a linear colour scale leaves almost every cell looking the same
-        # shade of green with a handful of red outliers. log1p spreads the
-        # whole range out so the map actually reads as a gradient rather than
-        # a scatter of hot spots on a flat green field.
-        vmax = max(cells["eb_estimate"].quantile(0.98), 0.01)
-        log_vmax = math.log1p(vmax)
-        cells = cells.assign(
-            norm=(cells["eb_estimate"].clip(upper=vmax).map(math.log1p) / log_vmax).clip(0, 1)
-        )
-
-        def _color(n: float) -> list[int]:
-            # green -> amber -> orange -> red, DESIGN.md §1 severity ramp.
-            stops = [(46, 125, 91), (201, 162, 39), (217, 119, 6), (180, 35, 44)]
-            idx = min(int(n * (len(stops) - 1)), len(stops) - 2)
-            frac = n * (len(stops) - 1) - idx
-            a, b = stops[idx], stops[idx + 1]
-            return [int(a[i] + (b[i] - a[i]) * frac) for i in range(3)] + [
-                int(140 + 100 * n)
-            ]
-
-        cells = cells.assign(color=cells["norm"].map(_color))
 
         layers = []
         if BOROUGH_BOUNDARIES.exists():
@@ -339,7 +354,8 @@ with map_col:
         )
         st.pydeck_chart(deck, use_container_width=True, height=560)
 
-        p50, p90, p98 = (cells["eb_estimate"].quantile(q) for q in (0.5, 0.9, 0.98))
+        legend = presentation.severity_legend_stops(cells["eb_estimate"])
+        p50, p90, p98 = legend["p50"], legend["p90"], legend["p98"]
         st.markdown(
             '<div class="legend">'
             '<div class="legend-item">Expected harm per cell '
@@ -398,16 +414,19 @@ with drawer_col:
             n_casualty = int((detail_rows["is_fatal"] | detail_rows["is_injury"]).sum())
             other_tools_drop = int((detail_rows["borough_source"] != "reported").sum())
 
-            theme.kpi_row("Crashes", f"{n_crashes:,}", "observed, this range")
-            theme.kpi_row("Casualty crashes", f"{n_casualty:,}", "observed")
-            theme.kpi_row("Injured", f"{n_injured:,}", "observed")
-            theme.kpi_row("Killed", f"{n_killed:,}", "observed")
+            theme.kpi_row("Crashes", presentation.format_count(n_crashes),
+                          "observed, this range")
+            theme.kpi_row("Casualty crashes", presentation.format_count(n_casualty),
+                          "observed")
+            theme.kpi_row("Injured", presentation.format_count(n_injured), "observed")
+            theme.kpi_row("Killed", presentation.format_count(n_killed), "observed")
 
             corridor_eb = query(con, "corridor_table", cache_key)
             eb_row = corridor_eb[corridor_eb["corridor"] == selected_canonical]
             if len(eb_row) and bool(eb_row.iloc[0]["eb_matched"]):
                 theme.kpi_row(
-                    "Expected harm", f"{eb_row.iloc[0]['eb_estimate']:.1f}",
+                    "Expected harm",
+                    presentation.format_expected_harm(eb_row.iloc[0]["eb_estimate"]),
                     "Empirical Bayes, cell-level rollup — not the ranking unit",
                 )
                 coverage = eb_row.iloc[0]["eb_coverage"]
@@ -448,12 +467,7 @@ if table.empty:
 else:
     show = table.copy()
     show["expected harm"] = show["eb_estimate"].where(show["eb_matched"]).round(1)
-    # eb_coverage is a data-completeness ratio and can be populated even for
-    # an UNMATCHED corridor (no EB fit at all) — gate on eb_matched too, or
-    # thousands of never-scored minor streets get flagged as "low coverage"
-    # alongside the handful of real bridge/tunnel cases this is meant to catch.
-    low_coverage = (show["eb_matched"] & show["eb_coverage"].notna()
-                    & (show["eb_coverage"] < LOW_COVERAGE_THRESHOLD))
+    low_coverage = presentation.low_coverage_mask(show)
     # The warning rides on the corridor name, not on the figure. Appending it
     # to "expected harm" forced that column to dtype string, which left-aligns
     # it while every other figure in the table right-aligns — the one column a
@@ -582,19 +596,10 @@ else:
                     cost_per_crash = estimator.cost_per_unit(capex, avoided)
 
                     theme.kpi_row("CAPEX", f"${capex:,.0f}")
-                    theme.kpi_row("Expected harm avoided", f"{avoided:.1f}")
-                    # Whole dollars render every sub-dollar result as "$0",
-                    # which reads as a broken metric rather than a small one.
-                    # At the default quantity of 1.00 that is the COMMON case:
-                    # $92 of guardrail against 2489.3 expected harm avoided is
-                    # $0.04, not nothing. Cents below $100, whole dollars above.
-                    if cost_per_crash is None:
-                        cost_text = "—"
-                    elif cost_per_crash < 100:
-                        cost_text = f"${cost_per_crash:,.2f}"
-                    else:
-                        cost_text = f"${cost_per_crash:,.0f}"
-                    theme.kpi_row("Cost per unit avoided", cost_text)
+                    theme.kpi_row("Expected harm avoided",
+                                  presentation.format_expected_harm(avoided))
+                    theme.kpi_row("Cost per unit avoided",
+                                  presentation.format_cost_per_unit(cost_per_crash))
                     st.caption(f"[FHWA CMF Clearinghouse]({t.cmf_source_url})" if t.cmf_source_url else "")
 
                     if include:
@@ -609,7 +614,8 @@ else:
             total_avoided = sum(r["expected_harm_avoided"] for r in selected_capex_rows)
             st.markdown("### Selected package")
             theme.kpi_row("Total CAPEX", f"${total_capex:,.0f}")
-            theme.kpi_row("Total expected harm avoided", f"{total_avoided:.1f}")
+            theme.kpi_row("Total expected harm avoided",
+                          presentation.format_expected_harm(total_avoided))
 
         st.markdown(
             '<div class="info-box">Planning estimate, not an evaluation. Crash '
