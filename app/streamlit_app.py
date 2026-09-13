@@ -103,7 +103,11 @@ title_col, theme_col = st.columns([5, 1])
 with title_col:
     st.markdown(
         '<h1 style="margin-bottom:0.1rem">NYC Collision Intelligence</h1>'
-        '<p style="color:var(--ink-dim);font-size:1rem;margin-top:0;max-width:64rem">'
+        # 64rem measured 131 characters per line at 1440px, nearly double the
+        # 75-character ceiling for readable prose. 34rem measures 71. The cost
+        # is one extra wrapped line; the gain is a paragraph the eye can track
+        # back to the left margin without losing its place.
+        '<p style="color:var(--ink-dim);font-size:1rem;margin-top:0;max-width:34rem">'
         "A chronic-risk prioritisation tool for NYC DOT transit and safety "
         "engineers, built on the NYPD Motor Vehicle Collisions dataset. It ranks "
         "streets by <strong>expected</strong> harm (Empirical Bayes, corrected for "
