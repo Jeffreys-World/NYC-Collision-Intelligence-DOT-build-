@@ -302,6 +302,53 @@ street alias table works — an explicit committed mapping with tests, not regex
 
 ## Testing
 
+### Finish the /qa run that was stopped on 2026-09-13
+
+**What:** A `/qa` run against `localhost:8501` was started after PR1 landed and stopped part
+way through Phase 3 (Orient) at the user's request. Resume it. Target `localhost:8501`,
+Standard tier, diff-aware over `c12c92f..89a3ac3`, driven by the eng-review test plan at
+`~/.gstack/projects/Jeffreys-World-GitHub/jeffrey-main-eng-review-test-plan-20260912-201000.md`
+rather than by git-diff heuristics — that plan names 4 critical paths, 7 key interactions and
+8 edge cases, and it is the checklist.
+
+**Why:** PR1 changed selection, filtering, caching and the feed panel — four things whose
+failures are silent rather than loud. The unit suite covers the logic (374 passing) and a
+browser pass covers the wiring between it. Neither substitutes for the other.
+
+**What was already covered before the stop** (do not redo):
+- Page loads clean: zero `stException` nodes, all four `<h2>` sections present, 7 canvases,
+  1 dataframe, `stMain` scrollHeight 2,241px.
+- Console: no errors attributable to the app. The `$B` console buffer carried errors from
+  05:07:16-05:07:27, all `ERR_CONNECTION_REFUSED` against a server that had already been
+  stopped, and produced nothing across two later clean loads.
+- Confirmed live during T5's verification earlier the same day: table row click drives the
+  drawer, the dropdown resets to city-wide, a non-featured corridor heads the drawer "3 AVE"
+  rather than "None", and the selection survives the casualty toggle.
+
+**What is still untested and is the actual remaining work:**
+1. **Export.** Set a road-class override, then export. The override must reach the PDF. This
+   is the one critical path with no browser coverage at all.
+2. **Unmatched corridor.** 3,840 of 8,931 have `eb_matched = False`. Selecting one must
+   disable the estimator and block export, and must read as an explained condition rather
+   than a wall of greyed-out controls.
+3. **Corridors with zero reported rows.** 1,657 of 8,931. Explicit zeros, never a blank
+   drawer.
+4. **The live-feed check.** One click, ten outcomes, none of which may read as an empty
+   success. `app/feed.py` is newly wired and had never executed before T6 — its render path
+   is the least-exercised code in the app.
+5. **Date range** narrowed to a single day, and cleared entirely.
+6. **Dropdown vs table arbitration** in both directions, repeatedly — most recently touched
+   must win every time.
+
+**Known finding, already tracked, do not re-file:** first paint renders two "Select a
+corridor above" empty states (drawer and estimator). Confirmed live. That is T12 in the
+Next up section, deliberately deferred to PR2, and it is the test plan's own first-paint
+edge case.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** nothing. Runs against localhost, needs no deploy.
+
 ### Re-test the WebGL blocker on CI before treating it as settled
 
 **What:** `DELIVERABLES.md` records that headless browsers here have no GPU and
