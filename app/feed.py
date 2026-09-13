@@ -724,6 +724,15 @@ def _strip_html(check: FeedCheck) -> str:
     # hold everything", which is true of all three of those states and of a
     # check that never got an answer.
     edge_image = "none" if check.status is Status.ALIGNED else _HATCH
+    # --ink-faint on both themes, never a severity hue: see the note above
+    # _HATCH. The hatch draws in the same colour, so a solid edge and a hatched
+    # edge are the same ink and only the texture carries the difference.
+    # This name was missing entirely until the module was first rendered — the
+    # f-string below referenced an `edge` that was never assigned, so the very
+    # first feed result raised NameError and replaced the panel with a
+    # traceback. app/feed.py was imported by nothing, so no test and no run
+    # ever reached this line.
+    edge = "var(--ink-faint,#5C6873)"
     caption = (COPY["server_date"].format(server_date=check.server_date)
                if check.server_date else COPY["no_server_date"])
     return (

@@ -22,7 +22,7 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
-from app import estimator, live, road_class, theme
+from app import estimator, feed, road_class, theme
 from app.data import (
     build_view,
     date_bounds,
@@ -172,14 +172,14 @@ with st.expander("What each part of this page does — start here if you're new"
 # Freshness line — persistent, every screen, §0.1 / §5
 # ---------------------------------------------------------------------------
 
-fresh_col, popover_col = st.columns([6, 1])
+fresh_col, why_col, check_col = st.columns([5, 1, 1])
 with fresh_col:
     st.markdown(
         f'<span style="color:var(--ink-dim);font-size:0.875rem">'
         f"{freshness_line(coverage_hi)}</span>",
         unsafe_allow_html=True,
     )
-with popover_col:
+with why_col:
     with st.popover("Why the lag? ▾", use_container_width=True):
         st.markdown(
             "**This is not a real-time feed.** NYPD collision records are a "
@@ -194,16 +194,21 @@ with popover_col:
             "crashes, and it does not know about a crash that has not yet "
             "reached NYPD's public feed."
         )
-        if st.button("Check the live feed for anything newer", key="check_feed_btn"):
-            with st.spinner("Querying the NYPD feed…"):
-                check = live.check_feed(coverage_hi)
-            if check.outcome == live.NO_NEWER:
-                st.success(check.headline)
-            elif check.outcome == live.NEWER:
-                st.warning(check.headline)
-            else:
-                st.error(check.headline)
-            st.caption(check.detail)
+with check_col:
+    # app/feed.py owns its own popover, its own button and its own result
+    # strip — the strip renders OUTSIDE the popover on purpose, driven by
+    # session_state, because st.popover closes on the rerun a button click
+    # causes and a result rendered inside it could vanish at the moment
+    # someone is watching. Do not re-implement the outcome classification
+    # here: ten outcomes, each with its own sentence, all in feed.py.
+    #
+    # This replaced app/live.py, which classified four outcomes and rendered
+    # them through st.success / st.warning / st.error. Those three are wrong
+    # on this page for a reason DESIGN.md §1 states: green already means
+    # low harm on this screen and red already means people died, so a red
+    # "feed check failed" banner overstates a dead network AND poaches the
+    # severity channel. feed.py draws on the completeness channel instead.
+    feed.render_feed_check(coverage_hi)
 
 
 # ---------------------------------------------------------------------------
