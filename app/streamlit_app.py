@@ -574,10 +574,18 @@ else:
 
                     theme.kpi_row("CAPEX", f"${capex:,.0f}")
                     theme.kpi_row("Expected harm avoided", f"{avoided:.1f}")
-                    theme.kpi_row(
-                        "Cost per unit avoided",
-                        f"${cost_per_crash:,.0f}" if cost_per_crash is not None else "—",
-                    )
+                    # Whole dollars render every sub-dollar result as "$0",
+                    # which reads as a broken metric rather than a small one.
+                    # At the default quantity of 1.00 that is the COMMON case:
+                    # $92 of guardrail against 2489.3 expected harm avoided is
+                    # $0.04, not nothing. Cents below $100, whole dollars above.
+                    if cost_per_crash is None:
+                        cost_text = "—"
+                    elif cost_per_crash < 100:
+                        cost_text = f"${cost_per_crash:,.2f}"
+                    else:
+                        cost_text = f"${cost_per_crash:,.0f}"
+                    theme.kpi_row("Cost per unit avoided", cost_text)
                     st.caption(f"[FHWA CMF Clearinghouse]({t.cmf_source_url})" if t.cmf_source_url else "")
 
                     if include:
