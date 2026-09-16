@@ -196,3 +196,16 @@ def test_featured_table_agrees_with_verify_figures(con):
     assert f.featured_hidden == expected["featured_deaths_hidden"]
     assert len(f.highways) == expected["featured_highways"]
     assert len(f.highways_at_zero) == expected["featured_highways_at_zero"]
+
+
+def test_the_preselected_corridor_opens_with_a_working_estimator(con):
+    """T12 preselects the headline corridor. The estimator and export are gated
+    on an EB match, so preselecting an unmatched corridor would trade three
+    empty boxes for a disabled estimator and a blocked export on first paint."""
+    from app.data import build_view, query
+
+    f = _live_finding(con)
+    build_view(con, date(2019, 1, 1), date(2026, 6, 11), False)
+    table = query.__wrapped__(con, "corridor_table", ("t-preselect",))
+    row = presentation.eb_row_for(table, f.headline.canonical)
+    assert presentation.is_eb_matched(row)

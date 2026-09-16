@@ -342,6 +342,24 @@ def _on_table_select() -> None:
     st.session_state[DROPDOWN_KEY] = CITY_WIDE
 
 
+# PRESELECTION (T12). Open on the corridor the headline names, so the drawer,
+# the estimator and the export all render populated on first paint instead of
+# three "select a corridor above" boxes. The corridor comes from the finding's
+# own rule, not a typed name, so the drawer beside the claim is always the
+# claim's own example (Belt Pkwy on the committed data, which is EB-matched —
+# tests/test_finding.py pins that, so the estimator opens working).
+#
+# Once per session, behind a sentinel. Seeding whenever SELECTED_KEY is empty
+# would undo a user's deliberate choice of city-wide on the next rerun. Both
+# keys are written before their widgets exist this run, which is the only
+# point Streamlit allows writing a widget's key.
+PRESELECTED_KEY = "preselection_done"
+if not st.session_state.get(PRESELECTED_KEY):
+    st.session_state[PRESELECTED_KEY] = True
+    if finding is not None and finding.headline is not None:
+        st.session_state[SELECTED_KEY] = finding.headline.canonical
+        st.session_state[DROPDOWN_KEY] = finding.headline.label
+
 corridor_options = [CITY_WIDE] + list(featured["corridor"])
 c1, c2, c3 = st.columns([2, 1, 2])
 with c1:
