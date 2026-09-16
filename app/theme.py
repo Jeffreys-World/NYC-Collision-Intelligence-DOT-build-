@@ -127,6 +127,36 @@ STATIC_CSS = """
 .finding-claim .finding-big strong { font-variant-numeric: tabular-nums; }
 .finding-claim .finding-sub { color: var(--ink-dim) !important; font-size: 1rem; margin: 0; max-width: 40rem; }
 
+/* The static finding table. Figures right-aligned in tabular numerals so the
+   two death columns compare straight down. The zero cells carry the hatch,
+   the completeness channel, and never a severity hue: a zero here is a gap in
+   the record, not low harm. */
+.finding-table {
+  width: 100%; border-collapse: collapse; font-size: 0.875rem;
+  font-variant-numeric: tabular-nums; margin-top: 0.5rem;
+}
+.finding-table caption {
+  caption-side: top; text-align: left; color: var(--ink-dim);
+  font-size: 0.8125rem; padding-bottom: 0.35rem;
+}
+.finding-table th, .finding-table td {
+  padding: 0.2rem 0.4rem; border-bottom: 1px solid var(--line);
+  color: var(--ink); font-weight: 400; text-align: right;
+}
+.finding-table th[scope="row"], .finding-table thead th:first-child { text-align: left; }
+.finding-table thead th { color: var(--ink-dim); font-size: 0.75rem; }
+.finding-table tfoot th, .finding-table tfoot td { font-weight: 600; border-bottom: none; }
+.finding-table .finding-class {
+  color: var(--ink-faint); font-size: 0.6875rem; margin-left: 0.4rem;
+}
+.finding-table td.finding-zero {
+  background-image: var(--incomplete-fill); color: var(--ink); font-weight: 600;
+}
+/* div p, for the same (0,1,1) specificity fight as .finding-big above. */
+div p.finding-note {
+  color: var(--ink-dim) !important; font-size: 0.8125rem; margin: 0.4rem 0 0;
+}
+
 /* Road-class control and CMF caveat block share this quieter treatment. */
 .info-box {
   border: 1px solid var(--line); background: var(--panel-2);

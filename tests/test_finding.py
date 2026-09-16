@@ -176,3 +176,23 @@ def test_citywide_pair_agrees_with_verify_figures(con):
     f = _live_finding(con)
     assert f.city_killed == figures["total_deaths"]
     assert f.city_killed_dropped == figures["deaths_in_borough_less_rows"]
+
+
+def test_featured_table_agrees_with_verify_figures(con):
+    """The static table's figures against verify_figures.compute_finding, which
+    uses `borough IS NOT NULL` and its own tie-break rather than the app's code.
+    Two code paths, compared with each other, no literal in between."""
+    spec = importlib.util.spec_from_file_location(
+        "verify_figures", ROOT / "scripts" / "verify_figures.py")
+    vf = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(vf)
+    expected = vf.compute_finding(ROOT / "data" / "processed" / "crashes.parquet")
+
+    f = _live_finding(con)
+    assert f.headline.canonical == expected["headline_corridor"]
+    assert f.headline.killed == expected["headline_corridor_deaths"]
+    assert f.headline.killed_reported == expected["headline_corridor_deaths_reported"]
+    assert f.featured_killed == expected["featured_deaths"]
+    assert f.featured_hidden == expected["featured_deaths_hidden"]
+    assert len(f.highways) == expected["featured_highways"]
+    assert len(f.highways_at_zero) == expected["featured_highways_at_zero"]

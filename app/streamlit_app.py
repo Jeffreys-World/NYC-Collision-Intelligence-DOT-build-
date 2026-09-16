@@ -183,20 +183,59 @@ if finding is not None and finding.headline is not None:
     shown = ("no traffic deaths" if h.killed_reported == 0
              else f"{h.killed_reported:,} traffic death"
                   + ("" if h.killed_reported == 1 else "s"))
-    st.markdown(
-        '<div class="finding-claim">'
-        f'<p class="finding-big">On the {h.label}, a borough-level crash view '
-        f"shows {shown}. There have been <strong>{h.killed:,}</strong>.</p>"
-        '<p class="finding-sub">'
-        f"{finding.city_killed_dropped:,} of the city’s "
-        f"{finding.city_killed:,} traffic deaths "
-        f"({finding.city_pct_dropped:.1f}%) are in crashes NYPD recorded with "
-        "no borough. Every borough-level view drops them. This one keeps them. "
-        f"Observed deaths, {finding.first_crash:%Y-%m-%d} to "
-        f"{finding.last_crash:%Y-%m-%d}, before any filter below."
-        "</p></div>",
-        unsafe_allow_html=True,
-    )
+    claim_col, table_col = st.columns([3, 2], gap="large")
+    with claim_col:
+        st.markdown(
+            '<div class="finding-claim">'
+            f'<p class="finding-big">On the {h.label}, a borough-level crash view '
+            f"shows {shown}. There have been <strong>{h.killed:,}</strong>.</p>"
+            '<p class="finding-sub">'
+            f"{finding.city_killed_dropped:,} of the city’s "
+            f"{finding.city_killed:,} traffic deaths "
+            f"({finding.city_pct_dropped:.1f}%) are in crashes NYPD recorded with "
+            "no borough. Every borough-level view drops them. This one keeps them. "
+            f"Observed deaths, {finding.first_crash:%Y-%m-%d} to "
+            f"{finding.last_crash:%Y-%m-%d}, before any filter below."
+            "</p></div>",
+            unsafe_allow_html=True,
+        )
+    with table_col:
+        # THE STATIC FINDING TABLE (T11, decision 10). The same numbers the
+        # reveal would demonstrate, stated flat so a cold reader has them
+        # before touching anything. A real <table>, not st.dataframe: the
+        # dataframe is a canvas, and this is the text statement of the finding.
+        # Whether the reveal gets built is judged against this table on the
+        # deployed URL — see TODOS.md "The interactive reveal".
+        body = "".join(
+            "<tr>"
+            f'<th scope="row">{r.label}'
+            f'<span class="finding-class">{r.road_class}</span></th>'
+            f"<td>{r.killed:,}</td>"
+            f'<td class="{"finding-zero" if r.killed and not r.killed_reported else ""}">'
+            f"{r.killed_reported:,}</td>"
+            "</tr>"
+            for r in finding.rows
+        )
+        n_high, n_zero = len(finding.highways), len(finding.highways_at_zero)
+        st.markdown(
+            '<table class="finding-table">'
+            "<caption>Observed traffic deaths on the "
+            f"{len(finding.rows)} featured corridors, all years</caption>"
+            '<thead><tr><th scope="col">Corridor</th>'
+            '<th scope="col">Deaths</th>'
+            '<th scope="col">In a borough-level view</th></tr></thead>'
+            f"<tbody>{body}</tbody>"
+            '<tfoot><tr><th scope="row">All featured</th>'
+            f"<td>{finding.featured_killed:,}</td>"
+            f"<td>{finding.featured_killed - finding.featured_hidden:,}</td>"
+            "</tr></tfoot></table>"
+            '<p class="finding-note">'
+            f"A borough-level view hides {finding.featured_hidden:,} of these "
+            f"{finding.featured_killed:,} deaths. {n_zero} of the {n_high} "
+            "featured highways show none at all."
+            "</p>",
+            unsafe_allow_html=True,
+        )
 
 
 # ---------------------------------------------------------------------------

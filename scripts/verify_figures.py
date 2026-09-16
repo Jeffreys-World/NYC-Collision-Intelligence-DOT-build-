@@ -51,7 +51,22 @@ PUBLISHED = {
     "deaths_in_borough_less_rows": 861,
     "unlabeled_carrying_coordinates": 221_658,
     "distinct_vehicle_type_code1": 1_430,
+    # The first screen's finding (PR2, T10/T11), written 2026-09-16. The app
+    # computes these through sql/finding_corridors.sql over borough_source;
+    # compute_finding() below recomputes them independently, with its own SQL,
+    # so a drift in either shows up here.
+    "headline_corridor_deaths": 56,
+    "headline_corridor_deaths_reported": 0,
+    "featured_deaths": 288,
+    "featured_deaths_hidden": 225,
+    "featured_highways": 8,
+    "featured_highways_at_zero": 7,
 }
+
+# The corridor the headline names. The app chooses it by rule
+# (presentation.headline_row), so a different winner is a changed claim.
+PUBLISHED_HEADLINE_CORRIDOR = "BELT PKWY"
+FEATURED_CSV = ROOT / "data" / "featured_corridors.csv"
 
 # Percentages and ratios are checked to a tolerance, because they are printed to
 # one or two decimals and a rounding difference is not a regression.
@@ -122,6 +137,49 @@ def compute(source: Path) -> dict:
     return f
 
 
+def compute_finding(source: Path) -> dict:
+    """The featured-corridor finding, from the Parquet and the featured CSV.
+
+    Deliberately NOT a call into app/presentation.py: this script is the check
+    on the app, so it must not share the app's code path. `borough IS NULL` is
+    the standard-view definition here; the app uses borough_source.
+    """
+    import csv
+
+    with FEATURED_CSV.open(encoding="utf-8-sig", newline="") as fh:
+        featured = list(csv.DictReader(l for l in fh if not l.startswith(">")))
+    classes = {r["canonical"]: r["expected_class"] for r in featured}
+
+    rows = duckdb.connect().execute(f"""
+        SELECT canonical,
+               coalesce(sum(number_of_persons_killed), 0)                          AS killed,
+               coalesce(sum(number_of_persons_killed) FILTER (WHERE borough IS NOT NULL), 0) AS shown
+        FROM read_parquet('{source.as_posix()}')
+        WHERE canonical IN (SELECT unnest(?))
+        GROUP BY canonical
+    """, [list(classes)]).fetchall()
+    stats = {c: (int(k), int(v)) for c, k, v in rows}
+    for c in classes:
+        stats.setdefault(c, (0, 0))
+
+    at_zero = [(k, c) for c, (k, v) in stats.items() if k > 0 and v == 0]
+    order = list(classes)
+    # Most deaths shown at zero; ties go to the CSV's order, as in the app.
+    headline = (min(at_zero, key=lambda kc: (-kc[0], order.index(kc[1])))[1]
+                if at_zero else None)
+    highways = [c for c in classes if classes[c] == "highway"]
+    return {
+        "headline_corridor": headline,
+        "headline_corridor_deaths": stats[headline][0] if headline else 0,
+        "headline_corridor_deaths_reported": stats[headline][1] if headline else 0,
+        "featured_deaths": sum(k for k, _ in stats.values()),
+        "featured_deaths_hidden": sum(k - v for k, v in stats.values()),
+        "featured_highways": len(highways),
+        "featured_highways_at_zero": sum(1 for c in highways
+                                         if stats[c][0] > 0 and stats[c][1] == 0),
+    }
+
+
 def render(f: dict) -> str:
     """The §0.2 table, ready to paste. Never retype these."""
     return "\n".join([
@@ -154,6 +212,10 @@ def diff(f: dict) -> int:
         ok = got == claimed
         bad += not ok
         print(f"{key:<34}{got:>14,}{claimed:>14,}   {'ok' if ok else 'CHANGED'}")
+    got, claimed = f.get("headline_corridor"), PUBLISHED_HEADLINE_CORRIDOR
+    ok = got == claimed
+    bad += not ok
+    print(f"{'headline_corridor':<34}{str(got):>14}{claimed:>14}   {'ok' if ok else 'CHANGED'}")
     for key, (claimed, tol) in PUBLISHED_PCT.items():
         got = f[key]
         ok = abs(got - claimed) <= tol
@@ -173,6 +235,7 @@ def main() -> int:
 
     print(f"Source: {args.source}")
     f = compute(args.source)
+    f.update(compute_finding(args.source))
     print(f"Coverage: {f['first_crash']:%Y-%m-%d} .. {f['last_crash']:%Y-%m-%d}")
     if "recovery" in f:
         r = f["recovery"]
