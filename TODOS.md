@@ -11,6 +11,16 @@ worktrees. The conflict surface is the entire script.
 
 ## Next up — PR2, the cold open
 
+**Status, 2026-09-16: T10-T12 landed** (`6a14855`, `03d0d03`, `5bb9f13`, 388 tests,
+`scripts/verify_figures.py` reproduces all 22 figures including the seven new finding
+figures). **T13 is the only open task in PR2**, and it needs the owner: a deploy is
+outward-facing, and the cold look is a human judgement. Two things for that look:
+
+- At 1280x900 the static table pushes the control bar and map below the fold. The claim
+  itself sits at y≈438 at 1280 and 820. Judge whether the table earns that space.
+- Not verified live: flipping the casualty toggle after choosing city-wide. The headless
+  driver could not operate Streamlit's toggle. The dropdown path was verified.
+
 Source: `docs/designs/ui-reveal-cold-open.md`, Implementation Tasks T10-T13. Do them in
 order.
 
