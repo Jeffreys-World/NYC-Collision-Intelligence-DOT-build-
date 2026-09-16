@@ -325,3 +325,19 @@ def map_cells(_con: duckdb.DuckDBPyConnection, cache_key: tuple):
     from app import presentation
 
     return presentation.with_severity_colors(_con.execute(read_sql("cell_map")).df())
+
+
+@st.cache_data(show_spinner=False, max_entries=MAX_MAP_CACHE_ENTRIES)
+def finding_frames(_con: duckdb.DuckDBPyConnection, cache_key: tuple):
+    """The completeness finding's two frames: per corridor, and city-wide.
+
+    Both read `crashes_raw`, not `crashes_filtered`, and that is deliberate —
+    see sql/finding_corridors.sql. Key with `presentation.finding_cache_key`,
+    which carries the source and nothing that a filter could move.
+
+    Must not run through `query()`: that function is keyed for the filtered
+    view, and sharing it would put the finding one careless cache-key edit away
+    from following the date picker.
+    """
+    return (_con.execute(read_sql("finding_corridors")).df(),
+            _con.execute(read_sql("finding_citywide")).df())

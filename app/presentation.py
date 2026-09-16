@@ -383,3 +383,143 @@ def map_cache_key(source_label: str) -> tuple:
     adds it. That rule is the only gate; there is no test for it.
     """
     return ("cell_map", source_label)
+
+
+# ------------------------------------------------------ the completeness finding
+#
+# The first screen's headline and the static finding table (PR2, T10/T11). The
+# figures are observed counts over the WHOLE dataset, never over
+# crashes_filtered:
+#
+#     sql/finding_corridors.sql ─┐                        ┌─► headline sentence
+#                                ├─► completeness_finding ┤
+#     sql/finding_citywide.sql  ─┘   (+ featured CSV)     └─► finding table
+#
+# Copy lives in streamlit_app.py, not here, so tests/test_feed_copy.py's
+# banned-vocabulary scan reaches every sentence the finding renders in. This
+# function returns numbers and names only.
+
+@dataclass(frozen=True)
+class FindingRow:
+    """One featured corridor's observed deaths, in full and in a borough-level
+    view. `hidden` is the difference: deaths every borough-level view drops."""
+
+    label: str
+    canonical: str
+    road_class: str
+    crashes: int
+    killed: int
+    killed_reported: int
+
+    @property
+    def hidden(self) -> int:
+        return self.killed - self.killed_reported
+
+
+@dataclass(frozen=True)
+class CompletenessFinding:
+    rows: tuple[FindingRow, ...]      # featured corridors, most deaths first
+    headline: FindingRow | None       # the corridor the headline names
+    first_crash: date
+    last_crash: date
+    city_killed: int
+    city_killed_dropped: int
+
+    @property
+    def city_pct_dropped(self) -> float:
+        return (self.city_killed_dropped / self.city_killed * 100
+                if self.city_killed else 0.0)
+
+    @property
+    def featured_killed(self) -> int:
+        return sum(r.killed for r in self.rows)
+
+    @property
+    def featured_hidden(self) -> int:
+        return sum(r.hidden for r in self.rows)
+
+    @property
+    def highways(self) -> tuple[FindingRow, ...]:
+        return tuple(r for r in self.rows if r.road_class == "highway")
+
+    @property
+    def highways_at_zero(self) -> tuple[FindingRow, ...]:
+        """Highways with deaths on record and none in a borough-level view.
+        A highway with no deaths at all is not hiding anything, so it does not
+        count toward "shows zero"."""
+        return tuple(r for r in self.highways
+                     if r.killed > 0 and r.killed_reported == 0)
+
+
+def headline_row(rows: tuple[FindingRow, ...]) -> FindingRow | None:
+    """The corridor the headline sentence names. Chosen by rule, not by hand.
+
+    Most deaths among corridors a borough-level view shows at ZERO — that is the
+    sharpest true sentence available ("shows 0; there have been N"). If no
+    featured corridor is fully hidden, fall back to the most hidden deaths, so
+    the headline degrades to a weaker true claim rather than to a false one.
+    Ties break on the featured CSV's own order, which `rows` preserves before
+    sorting, so the choice is stable across reruns.
+    """
+    hidden_rows = [r for r in rows if r.hidden > 0]
+    if not hidden_rows:
+        return None
+    at_zero = [r for r in hidden_rows if r.killed_reported == 0]
+    pool = at_zero or hidden_rows
+    key = (lambda r: r.killed) if at_zero else (lambda r: r.hidden)
+    return max(pool, key=key)
+
+
+def completeness_finding(corridors: pd.DataFrame, citywide: pd.DataFrame,
+                         featured: pd.DataFrame) -> CompletenessFinding | None:
+    """Join the unfiltered per-corridor figures onto the featured list.
+
+    A featured corridor with no crashes at all renders as explicit zeros, never
+    as a missing row: a table that silently loses a line is a table whose total
+    no longer matches its own caption.
+
+    None when there is nothing to state (no citywide row, e.g. an empty data
+    source). The caller renders no headline rather than a sentence about zero.
+    """
+    if citywide.empty or featured.empty:
+        return None
+    by_canonical = (corridors.set_index("canonical") if not corridors.empty
+                    else pd.DataFrame(columns=["crashes", "killed", "killed_reported"]))
+
+    rows = []
+    for _, f in featured.iterrows():
+        hit = (by_canonical.loc[f["canonical"]]
+               if f["canonical"] in by_canonical.index else None)
+        rows.append(FindingRow(
+            label=str(f["corridor"]),
+            canonical=str(f["canonical"]),
+            road_class=str(f.get("expected_class", "") or ""),
+            crashes=int(hit["crashes"]) if hit is not None else 0,
+            killed=int(hit["killed"]) if hit is not None else 0,
+            killed_reported=int(hit["killed_reported"]) if hit is not None else 0,
+        ))
+    # Stable sort: equal death counts keep the featured CSV's order.
+    ordered = tuple(sorted(rows, key=lambda r: r.killed, reverse=True))
+
+    city = citywide.iloc[0]
+    return CompletenessFinding(
+        rows=ordered,
+        headline=headline_row(tuple(rows)),
+        first_crash=pd.Timestamp(city["first_crash"]).date(),
+        last_crash=pd.Timestamp(city["last_crash"]).date(),
+        city_killed=int(city["killed"]),
+        city_killed_dropped=int(city["killed_dropped"]),
+    )
+
+
+def finding_cache_key(source_label: str) -> tuple:
+    """The key for the completeness finding: the source, and nothing else.
+
+    Same shape as map_cache_key and for a stronger reason. The finding is
+    computed over crashes_raw, not crashes_filtered, so the date range and the
+    casualty toggle cannot change it — and putting them in this tuple would not
+    just waste cache entries, it would invite the next edit to route the query
+    through the filtered view "to match the key". A headline that moves when
+    someone touches the date picker is not a finding.
+    """
+    return ("finding", source_label)

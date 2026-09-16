@@ -67,6 +67,7 @@ from app import estimator, feed, presentation, road_class, theme
 from app.data import (
     build_view,
     date_bounds,
+    finding_frames,
     freshness_line,
     get_connection,
     map_cells,
@@ -134,23 +135,25 @@ featured = load_featured_corridors()
 
 
 # ---------------------------------------------------------------------------
-# Title and functionality summary
+# First screen — title, the finding, freshness (PR2, T10)
 # ---------------------------------------------------------------------------
+#
+# There used to be a nine-bullet "What each part of this page does" expander
+# here. It sat between the reader and the finding, and one of its bullets was
+# false: it said the casualty toggle restricted "every figure on the page",
+# when the map never moved with it. The page now opens on the finding instead,
+# and each control's own help text says what that control does.
 
 title_col, theme_col = st.columns([5, 1])
 with title_col:
     st.markdown(
         '<h1 style="margin-bottom:0.1rem">NYC Collision Intelligence</h1>'
-        # 64rem measured 131 characters per line at 1440px, nearly double the
-        # 75-character ceiling for readable prose. 34rem measures 71. The cost
-        # is one extra wrapped line; the gain is a paragraph the eye can track
-        # back to the left margin without losing its place.
+        # 34rem keeps the line under ~75 characters at 1440px; 64rem measured
+        # 131, nearly double what the eye can track back to the margin.
         '<p style="color:var(--ink-dim);font-size:1rem;margin-top:0;max-width:34rem">'
-        "A chronic-risk prioritisation tool for NYC DOT transit and safety "
-        "engineers, built on the NYPD Motor Vehicle Collisions dataset. It ranks "
-        "streets by <strong>expected</strong> harm (Empirical Bayes, corrected for "
-        "regression to the mean) rather than raw observed crash counts, and it "
-        "includes the crashes every other borough-level view silently drops."
+        "Chronic-risk prioritisation for NYC DOT. Ranks streets by "
+        "<strong>expected</strong> harm (Empirical Bayes) and keeps the crashes "
+        "borough-level views drop."
         "</p>",
         unsafe_allow_html=True,
     )
@@ -169,40 +172,30 @@ with theme_col:
              "keeps the same meaning in both — only the background flips.",
     )
 
-with st.expander("What each part of this page does — start here if you're new"):
+# THE FINDING. Computed once per source from the UNFILTERED data — never from
+# crashes_filtered, so no control on this page can move it. Every number in
+# the sentence below comes from finding_frames; none is typed.
+finding = presentation.completeness_finding(
+    *finding_frames(con, presentation.finding_cache_key(source.label)), featured)
+
+if finding is not None and finding.headline is not None:
+    h = finding.headline
+    shown = ("no traffic deaths" if h.killed_reported == 0
+             else f"{h.killed_reported:,} traffic death"
+                  + ("" if h.killed_reported == 1 else "s"))
     st.markdown(
-        "- **Light mode toggle** (top right) — switches between the dark "
-        "workspace theme and a light background. Purely visual; every "
-        "figure and colour-code below means the same thing either way.\n"
-        "- **Map** — every scored ~111m × 84m street cell, coloured and "
-        "sized by expected harm. Filled = Empirical Bayes estimate; a cell "
-        "with no EB match never appears here. The **'Show as 3D height'** "
-        "switch above the map adds height as a second, redundant encoding "
-        "of the same value — off by default so the map reads as a flat, "
-        "easy-to-scan heat map.\n"
-        "- **Featured corridors dropdown** — pick a named street to open its "
-        "detail. Also the keyboard and screen-reader path into the drawer, "
-        "since the map itself is a WebGL canvas with no per-cell semantics.\n"
-        "- **Casualty crashes only** — off by default (every crash counts); "
-        "on restricts every figure on the page to crashes with an injury or "
-        "death.\n"
-        "- **Date range** — restricts observed figures (crashes, injured, "
-        "killed) to a window. The Empirical Bayes estimate itself is fit "
-        "once over its own multi-year training/holdout window and does not "
-        "change with this picker — see the drawer's 'Expected harm' caption.\n"
-        "- **Drawer** — detail for the selected corridor: observed crashes, "
-        "injuries, deaths, its Empirical Bayes estimate, a correctable road-"
-        "class control, and the share of crashes other tools drop for lacking "
-        "a borough.\n"
-        "- **Ranked corridors** — the same figures as the map, in a table. "
-        "The accessible equivalent of the map, not a secondary view.\n"
-        "- **Countermeasure & budget estimator** — once a corridor is "
-        "selected, branches to the treatments valid for its road class "
-        "(guardrails on a highway, road diets on a surface street, never the "
-        "reverse) with editable, FHWA-sourced CMFs and costs.\n"
-        "- **Executive summary export** — a PDF carrying the selection, "
-        "filters, costs, CMFs and caveats together, blocked if any section "
-        "above is in a degraded state."
+        '<div class="finding-claim">'
+        f'<p class="finding-big">On the {h.label}, a borough-level crash view '
+        f"shows {shown}. There have been <strong>{h.killed:,}</strong>.</p>"
+        '<p class="finding-sub">'
+        f"{finding.city_killed_dropped:,} of the city’s "
+        f"{finding.city_killed:,} traffic deaths "
+        f"({finding.city_pct_dropped:.1f}%) are in crashes NYPD recorded with "
+        "no borough. Every borough-level view drops them. This one keeps them. "
+        f"Observed deaths, {finding.first_crash:%Y-%m-%d} to "
+        f"{finding.last_crash:%Y-%m-%d}, before any filter below."
+        "</p></div>",
+        unsafe_allow_html=True,
     )
 
 
@@ -324,8 +317,13 @@ with c1:
 with c2:
     casualty_only = st.toggle(
         "Casualty crashes only", value=False,
+        # Checked against the code on 2026-09-16, not assumed: the predicate is
+        # in sql/base_view.sql, which the drawer and ranked table read. The map
+        # reads eb_cells and the finding reads crashes_raw, so neither moves.
         help="Off by default (spec §1.3): includes every crash. On: only rows "
-             "with an injury or a death.",
+             "with an injury or a death. Applies to the observed figures in the "
+             "drawer and the ranked table; the map and the finding at the top "
+             "of the page do not change.",
     )
 with c3:
     picked_range = st.date_input(
@@ -333,7 +331,8 @@ with c3:
         min_value=coverage_lo, max_value=coverage_hi,
         help="Restricts observed figures (crashes, injured, killed) to this "
              "window. Does not change the Empirical Bayes estimate, which is "
-             "fit once over its own training/holdout years.",
+             "fit once over its own training/holdout years, or the finding at "
+             "the top of the page, which covers every year.",
     )
 
 date_from, date_to = normalize_date_range(picked_range, coverage_lo, coverage_hi)

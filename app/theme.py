@@ -107,6 +107,26 @@ STATIC_CSS = """
   padding: 0.75rem 1rem; border-radius: 6px; font-weight: 600; margin-bottom: 0.75rem;
 }
 
+/* The finding (first screen). The claim is the page's lead, so it outranks
+   everything but the h1 - the 2026-09-13 design review found it at 13px muted
+   grey below the fold. Neutral ink, never a severity hue: it is a completeness
+   statement, and DESIGN.md Section 1 keeps completeness off the harm ramp. The
+   left rule carries the hatch texture for the same reason. */
+.finding-claim {
+  border-left: 4px solid transparent; border-image: var(--incomplete-fill) 1;
+  padding: 0.25rem 0 0.25rem 1rem; margin: 0.75rem 0 1rem;
+}
+/* Doubled class selectors: Streamlit's own `[data-testid] p` rule is (0,1,1)
+   and silently reset these to 16px - measured live, not guessed. The colour
+   needs !important to survive LIGHT_APP_OVERRIDES, which forces every
+   markdown paragraph to --ink. */
+.finding-claim .finding-big {
+  color: var(--ink) !important; font-size: 1.625rem; font-weight: 600; line-height: 1.25;
+  margin: 0 0 0.4rem; max-width: 40rem;
+}
+.finding-claim .finding-big strong { font-variant-numeric: tabular-nums; }
+.finding-claim .finding-sub { color: var(--ink-dim) !important; font-size: 1rem; margin: 0; max-width: 40rem; }
+
 /* Road-class control and CMF caveat block share this quieter treatment. */
 .info-box {
   border: 1px solid var(--line); background: var(--panel-2);
